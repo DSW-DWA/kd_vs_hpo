@@ -1,0 +1,22 @@
+[project]
+name = "kd-vs-hpo"
+version = "0.1.0"
+description = "Knowledge distillation and Hyper parameter optimization recipes."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "calflops>=0.3.2",
+    "lightning>=2.6.5",
+    "numpy>=2.4.6",
+    "pandas>=3.0.3",
+    "plotly>=6.8.0",
+    "torch>=2.12.0",
+    "torchvision>=0.27.0",
+    "transformers>=5.10.2",
+]
+
+[dependency-groups]
+dev = [
+    "jupyterlab>=4.5.8",
+    "ruff>=0.15.16",
+]
