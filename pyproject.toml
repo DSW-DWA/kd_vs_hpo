@@ -6,10 +6,12 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "calflops>=0.3.2",
+    "ipywidgets>=8.1.8",
     "lightning>=2.6.5",
     "numpy>=2.4.6",
     "pandas>=3.0.3",
     "plotly>=6.8.0",
+    "tensorboard>=2.20.0",
     "torch>=2.12.0",
     "torchvision>=0.27.0",
     "transformers>=5.10.2",
