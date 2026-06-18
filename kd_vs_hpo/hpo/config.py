@@ -30,3 +30,5 @@ class HPOExperimentConfig:
     output_dir: Path = Path("hpo_output")
     arch_rows: tuple[int, ...] | None = None
     generate_plots: bool = True
+    gpu_ids: tuple[int, ...] | None = None
+    workers_per_gpu: int = 1

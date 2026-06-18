@@ -13,6 +13,8 @@ from kd_vs_hpo.hpo import (
     run_hpo_experiment,
 )
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -38,6 +40,19 @@ def parse_args() -> argparse.Namespace:
         help="Training device.",
     )
     parser.add_argument(
+        "--gpu-ids",
+        type=int,
+        nargs="*",
+        default=None,
+        help="Visible GPU IDs to use. By default, use all visible GPUs.",
+    )
+    parser.add_argument(
+        "--workers-per-gpu",
+        type=int,
+        default=4,
+        help="Number of models trained concurrently on each GPU.",
+    )
+    parser.add_argument(
         "--log-level",
         choices=("DEBUG", "INFO", "WARNING", "ERROR"),
         default="INFO",
@@ -56,6 +71,11 @@ def select_device(name: str) -> torch.device:
 
 def build_experiment(args: argparse.Namespace) -> HPOExperimentConfig:
     arch_rows = tuple(args.arch_rows) if args.arch_rows else None
+    output_dir = (
+        args.output_dir
+        if args.output_dir.is_absolute()
+        else PROJECT_ROOT / args.output_dir
+    )
     return HPOExperimentConfig(
         train=TrainConfig(
             batch_size=256,
@@ -67,7 +87,7 @@ def build_experiment(args: argparse.Namespace) -> HPOExperimentConfig:
             deterministic=False,
             amp=True,
             train_step_multiplier=3.0,
-            data_root=Path("data"),
+            data_root=PROJECT_ROOT / "data",
         ),
         search_space=SearchSpace(
             lr=(1e-3, 3e-1),
@@ -80,10 +100,12 @@ def build_experiment(args: argparse.Namespace) -> HPOExperimentConfig:
             max_initial_configs=12,
             max_epochs=81,
         ),
-        architectures_path=Path("../experiments/nats_architectures_10.json"),
-        costs_path=Path("../experiments/sampled_architecture_costs.csv"),
-        output_dir=args.output_dir,
+        architectures_path=PROJECT_ROOT / "experiments/nats_architectures_10.json",
+        costs_path=PROJECT_ROOT / "experiments/sampled_architecture_costs.csv",
+        output_dir=output_dir,
         arch_rows=arch_rows,
+        gpu_ids=tuple(args.gpu_ids) if args.gpu_ids is not None else None,
+        workers_per_gpu=args.workers_per_gpu,
     )
 
 
@@ -101,7 +123,21 @@ def main() -> None:
     logger.info("Starting HPO experiment")
     logger.info("Device: %s", device)
     if device.type == "cuda":
-        logger.info("GPU: %s", torch.cuda.get_device_name(device))
+        logger.info("Visible GPUs: %s", torch.cuda.device_count())
+        for gpu_id in range(torch.cuda.device_count()):
+            free_bytes, total_bytes = torch.cuda.mem_get_info(gpu_id)
+            logger.info(
+                "GPU %s: %s, free %.1f/%.1f GiB",
+                gpu_id,
+                torch.cuda.get_device_name(gpu_id),
+                free_bytes / 2**30,
+                total_bytes / 2**30,
+            )
+        logger.info(
+            "Parallel workers: gpu_ids=%s workers_per_gpu=%s",
+            experiment.gpu_ids or "all",
+            experiment.workers_per_gpu,
+        )
     logger.info(
         "Architecture rows: %s",
         "all" if experiment.arch_rows is None else experiment.arch_rows,

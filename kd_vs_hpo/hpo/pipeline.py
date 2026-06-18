@@ -1,7 +1,9 @@
 import json
 import logging
 import math
+import multiprocessing as mp
 import time
+from concurrent.futures import Future, ProcessPoolExecutor
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -35,6 +37,97 @@ class HPOExperimentResult:
     stages_path: Path
     summary_path: Path
     plot_paths: tuple[Path, ...]
+
+
+@dataclass(frozen=True)
+class _TrainingStageTask:
+    trial: TrialConfig
+    target_epochs: int
+    plan: ASHAPlan
+    seed: int
+    arch_record: dict[str, Any]
+    experiment: HPOExperimentConfig
+
+
+_worker_train_loader: DataLoader | None = None
+_worker_val_loader: DataLoader | None = None
+_worker_device: torch.device | None = None
+
+
+def _initialize_gpu_worker(
+    experiment: HPOExperimentConfig,
+    gpu_id: int,
+) -> None:
+    global _worker_device, _worker_train_loader, _worker_val_loader
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s | %(levelname)s | %(processName)s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    torch.cuda.set_device(gpu_id)
+    _worker_device = torch.device(f"cuda:{gpu_id}")
+    train_loader, val_loader, _, *_ = build_cifar10_dataloaders(
+        experiment.train,
+        _worker_device,
+    )
+    _worker_train_loader = train_loader
+    _worker_val_loader = val_loader
+    logger.info(
+        "GPU worker ready: pid=%s device=%s",
+        mp.current_process().pid,
+        _worker_device,
+    )
+
+
+def _run_training_stage_worker(task: _TrainingStageTask) -> dict[str, Any]:
+    if (
+        _worker_device is None
+        or _worker_train_loader is None
+        or _worker_val_loader is None
+    ):
+        raise RuntimeError("GPU worker was not initialized")
+    return _run_training_stage(
+        trial=task.trial,
+        target_epochs=task.target_epochs,
+        plan=task.plan,
+        seed=task.seed,
+        arch_record=task.arch_record,
+        experiment=task.experiment,
+        train_loader=_worker_train_loader,
+        val_loader=_worker_val_loader,
+        device=_worker_device,
+    )
+
+
+class _ParallelStageRunner:
+    def __init__(
+        self,
+        experiment: HPOExperimentConfig,
+        gpu_ids: tuple[int, ...],
+    ) -> None:
+        if experiment.workers_per_gpu < 1:
+            raise ValueError("workers_per_gpu must be at least 1")
+        context = mp.get_context("spawn")
+        self._executors = [
+            ProcessPoolExecutor(
+                max_workers=experiment.workers_per_gpu,
+                mp_context=context,
+                initializer=_initialize_gpu_worker,
+                initargs=(experiment, gpu_id),
+            )
+            for gpu_id in gpu_ids
+        ]
+        self._next_executor = 0
+
+    def submit(self, task: _TrainingStageTask) -> Future[dict[str, Any]]:
+        executor = self._executors[self._next_executor]
+        self._next_executor = (self._next_executor + 1) % len(self._executors)
+        return executor.submit(_run_training_stage_worker, task)
+
+    def close(self) -> None:
+        for executor in self._executors:
+            executor.shutdown(wait=True, cancel_futures=False)
 
 
 def _load_architectures(path: Path, rows: tuple[int, ...] | None) -> list[dict[str, Any]]:
@@ -205,7 +298,8 @@ def _run_training_stage(
         )
         scheduler.step()
         logger.info(
-            "arch=%s trial=%s epoch=%s/%s loss=%.4f lr=%.3e",
+            "device=%s arch=%s trial=%s epoch=%s/%s loss=%.4f lr=%.3e",
+            device,
             arch_record["arch_index"],
             trial.trial_id,
             epoch + 1,
@@ -229,7 +323,9 @@ def _run_training_stage(
     torch.save(state, checkpoint)
     torch.save(state, stage_checkpoint)
     logger.info(
-        "arch=%s trial=%s target_epochs=%s val_acc1=%.2f elapsed_min=%.1f",
+        "device=%s arch=%s trial=%s target_epochs=%s val_acc1=%.2f "
+        "elapsed_min=%.1f",
+        device,
         arch_record["arch_index"],
         trial.trial_id,
         target_epochs,
@@ -249,6 +345,7 @@ def _run_architecture(
     n_train: int,
     n_val: int,
     device: torch.device,
+    parallel_runner: _ParallelStageRunner | None,
 ) -> pd.DataFrame:
     forward_flops = int(float(cost["forward_flops_per_sample"]))
     epoch_flops = int(experiment.train.train_step_multiplier * forward_flops * n_train)
@@ -283,26 +380,79 @@ def _run_architecture(
             100 * spent_flops / experiment.asha.budget_flops_per_arch,
         )
         rung_records: list[dict[str, Any]] = []
+        scheduled: list[
+            tuple[
+                TrialConfig,
+                int,
+                int,
+                int,
+                int,
+                int,
+                int,
+                Future[dict[str, Any]] | None,
+            ]
+        ] = []
         for trial in alive:
             incremental_epochs = target_epochs - completed_epochs[trial.trial_id]
             train_flops = incremental_epochs * epoch_flops
             stage_flops = train_flops + validation_flops
             if spent_flops + stage_flops > experiment.asha.budget_flops_per_arch:
                 continue
-            stage = _run_training_stage(
-                trial=trial,
-                target_epochs=target_epochs,
-                plan=plan,
-                seed=seed + trial.trial_id,
-                arch_record=arch_record,
-                experiment=experiment,
-                train_loader=train_loader,
-                val_loader=val_loader,
-                device=device,
-            )
             spent_flops += stage_flops
             spent_train_flops += train_flops
             spent_validation_flops += validation_flops
+            future = (
+                parallel_runner.submit(
+                    _TrainingStageTask(
+                        trial=trial,
+                        target_epochs=target_epochs,
+                        plan=plan,
+                        seed=seed + trial.trial_id,
+                        arch_record=arch_record,
+                        experiment=experiment,
+                    )
+                )
+                if parallel_runner is not None
+                else None
+            )
+            scheduled.append(
+                (
+                    trial,
+                    incremental_epochs,
+                    train_flops,
+                    stage_flops,
+                    spent_flops,
+                    spent_train_flops,
+                    spent_validation_flops,
+                    future,
+                )
+            )
+
+        for (
+            trial,
+            incremental_epochs,
+            train_flops,
+            stage_flops,
+            cumulative_flops,
+            cumulative_train_flops,
+            cumulative_validation_flops,
+            future,
+        ) in scheduled:
+            stage = (
+                future.result()
+                if future is not None
+                else _run_training_stage(
+                    trial=trial,
+                    target_epochs=target_epochs,
+                    plan=plan,
+                    seed=seed + trial.trial_id,
+                    arch_record=arch_record,
+                    experiment=experiment,
+                    train_loader=train_loader,
+                    val_loader=val_loader,
+                    device=device,
+                )
+            )
             completed_epochs[trial.trial_id] = target_epochs
             record = {
                 "arch_row": arch_record["arch_row"],
@@ -316,9 +466,9 @@ def _run_architecture(
                 "train_flops": train_flops,
                 "validation_flops": validation_flops,
                 "stage_flops": stage_flops,
-                "cumulative_flops": spent_flops,
-                "cumulative_train_flops": spent_train_flops,
-                "cumulative_validation_flops": spent_validation_flops,
+                "cumulative_flops": cumulative_flops,
+                "cumulative_train_flops": cumulative_train_flops,
+                "cumulative_validation_flops": cumulative_validation_flops,
                 "val_acc1": float(stage["val_acc1"]),
                 "checkpoint_path": stage["checkpoint_path"],
                 "status": "completed",
@@ -394,6 +544,8 @@ def run_hpo_experiment(
     experiment: HPOExperimentConfig,
     device: torch.device,
 ) -> HPOExperimentResult:
+    if experiment.workers_per_gpu < 1:
+        raise ValueError("workers_per_gpu must be at least 1")
     experiment.output_dir.mkdir(parents=True, exist_ok=True)
     (experiment.output_dir / "checkpoints").mkdir(parents=True, exist_ok=True)
     architectures = _load_architectures(experiment.architectures_path, experiment.arch_rows)
@@ -414,26 +566,53 @@ def run_hpo_experiment(
         n_test,
     )
 
-    results = []
-    for arch_record in architectures:
-        arch_row = arch_record["arch_row"]
-        if arch_row not in costs:
-            raise KeyError(f"No FLOPs record for architecture row {arch_row}")
-        results.append(
-            _run_architecture(
-                arch_record=arch_record,
-                cost=costs[arch_row],
-                experiment=experiment,
-                train_loader=train_loader,
-                val_loader=val_loader,
-                n_train=n_train,
-                n_val=n_val,
-                device=device,
-            )
+    parallel_runner = None
+    evaluation_device = device
+    if device.type == "cuda":
+        gpu_ids = experiment.gpu_ids
+        if gpu_ids is None:
+            gpu_ids = tuple(range(torch.cuda.device_count()))
+        if not gpu_ids:
+            raise ValueError("No GPU IDs were selected for CUDA execution")
+        invalid_gpu_ids = [
+            gpu_id for gpu_id in gpu_ids if gpu_id < 0 or gpu_id >= torch.cuda.device_count()
+        ]
+        if invalid_gpu_ids:
+            raise ValueError(f"Invalid GPU IDs: {invalid_gpu_ids}")
+        evaluation_device = torch.device(f"cuda:{gpu_ids[0]}")
+        parallel_runner = _ParallelStageRunner(experiment, gpu_ids)
+        logger.info(
+            "Parallel HPO enabled: gpu_ids=%s workers_per_gpu=%s total_workers=%s",
+            gpu_ids,
+            experiment.workers_per_gpu,
+            len(gpu_ids) * experiment.workers_per_gpu,
         )
 
+    results = []
+    try:
+        for arch_record in architectures:
+            arch_row = arch_record["arch_row"]
+            if arch_row not in costs:
+                raise KeyError(f"No FLOPs record for architecture row {arch_row}")
+            results.append(
+                _run_architecture(
+                    arch_record=arch_record,
+                    cost=costs[arch_row],
+                    experiment=experiment,
+                    train_loader=train_loader,
+                    val_loader=val_loader,
+                    n_train=n_train,
+                    n_val=n_val,
+                    device=device,
+                    parallel_runner=parallel_runner,
+                )
+            )
+    finally:
+        if parallel_runner is not None:
+            parallel_runner.close()
+
     stages = pd.concat(results, ignore_index=True) if results else pd.DataFrame()
-    summary = _build_summary(stages, test_loader, n_test, device)
+    summary = _build_summary(stages, test_loader, n_test, evaluation_device)
     stages_path = experiment.output_dir / "hpo_results.csv"
     summary_path = experiment.output_dir / "hpo_summary.csv"
     stages.to_csv(stages_path, index=False)

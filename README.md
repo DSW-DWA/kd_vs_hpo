@@ -46,3 +46,9 @@ Choose architecture rows explicitly or run all rows:
 python notebooks/hpo_flops_budget.py --arch-rows 0 1 2
 python notebooks/hpo_flops_budget.py --arch-rows
 ```
+
+Use both GPUs and train four models concurrently on each GPU:
+
+```shell
+python notebooks/hpo_flops_budget.py --gpu-ids 0 1 --workers-per-gpu 4
+```
