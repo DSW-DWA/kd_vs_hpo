@@ -23,6 +23,7 @@ from kd_vs_hpo.common.utils import (
 )
 from kd_vs_hpo.hpo.asha import ASHAPlan, TrialConfig, make_plan, sample_trials
 from kd_vs_hpo.hpo.config import HPOExperimentConfig
+from kd_vs_hpo.hpo.plotting import save_hpo_plots
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,7 @@ class HPOExperimentResult:
     summary: pd.DataFrame
     stages_path: Path
     summary_path: Path
+    plot_paths: tuple[Path, ...]
 
 
 def _load_architectures(path: Path, rows: tuple[int, ...] | None) -> list[dict[str, Any]]:
@@ -399,4 +401,15 @@ def run_hpo_experiment(
     summary_path = experiment.output_dir / "hpo_summary.csv"
     stages.to_csv(stages_path, index=False)
     summary.to_csv(summary_path, index=False)
-    return HPOExperimentResult(stages, summary, stages_path, summary_path)
+    plot_paths = (
+        save_hpo_plots(stages, summary, experiment.output_dir)
+        if experiment.generate_plots
+        else ()
+    )
+    return HPOExperimentResult(
+        stages=stages,
+        summary=summary,
+        stages_path=stages_path,
+        summary_path=summary_path,
+        plot_paths=plot_paths,
+    )

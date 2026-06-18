@@ -19,9 +19,15 @@ kd_vs_hpo/
 
 ## Installing
 
-```
+Python 3.11 is required.
+
+```shell
 make install
 ```
 
 Run notebooks from the repository root so their relative paths resolve
 correctly.
+
+The HPO pipeline writes CSV results to `hpo_output/` and automatically creates
+interactive, self-contained HTML charts in `hpo_output/plots/`. Set
+`HPOExperimentConfig(generate_plots=False)` to disable chart generation.

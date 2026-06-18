@@ -29,3 +29,4 @@ class HPOExperimentConfig:
     costs_path: Path = Path("experiments/sampled_architecture_costs.csv")
     output_dir: Path = Path("hpo_output")
     arch_rows: tuple[int, ...] | None = None
+    generate_plots: bool = True
