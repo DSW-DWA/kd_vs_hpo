@@ -5,7 +5,7 @@ import torchvision.datasets as datasets
 import torchvision.transforms as T
 from torch.utils.data import DataLoader, Subset
 
-from kd_vs_hpo.config import TrainConfig
+from kd_vs_hpo.common.config import TrainConfig
 
 
 normalize_kwargs = {
@@ -13,17 +13,21 @@ normalize_kwargs = {
     "std": [0.24703223, 0.24348513, 0.26158784],
 }
 
-train_transform = T.Compose([
-    T.RandomCrop(size=32, padding=4),
-    T.RandomHorizontalFlip(p=0.5),
-    T.ToTensor(),
-    T.Normalize(**normalize_kwargs),
-])
+train_transform = T.Compose(
+    [
+        T.RandomCrop(size=32, padding=4),
+        T.RandomHorizontalFlip(p=0.5),
+        T.ToTensor(),
+        T.Normalize(**normalize_kwargs),
+    ]
+)
 
-eval_transform = T.Compose([
-    T.ToTensor(),
-    T.Normalize(**normalize_kwargs),
-])
+eval_transform = T.Compose(
+    [
+        T.ToTensor(),
+        T.Normalize(**normalize_kwargs),
+    ]
+)
 
 
 def build_cifar10_dataloaders(cfg: TrainConfig, device: torch.device) -> Any:
@@ -31,13 +35,22 @@ def build_cifar10_dataloaders(cfg: TrainConfig, device: torch.device) -> Any:
     cfg.log_dir.mkdir(parents=True, exist_ok=True)
 
     train_aug_dataset = datasets.CIFAR10(
-        root=cfg.data_root, train=True, download=True, transform=train_transform
+        root=cfg.data_root,
+        train=True,
+        download=True,
+        transform=train_transform,
     )
     train_eval_dataset = datasets.CIFAR10(
-        root=cfg.data_root, train=True, download=True, transform=eval_transform
+        root=cfg.data_root,
+        train=True,
+        download=True,
+        transform=eval_transform,
     )
     test_dataset = datasets.CIFAR10(
-        root=cfg.data_root, train=False, download=True, transform=eval_transform
+        root=cfg.data_root,
+        train=False,
+        download=True,
+        transform=eval_transform,
     )
 
     split_gen = torch.Generator().manual_seed(cfg.seed)
@@ -47,14 +60,11 @@ def build_cifar10_dataloaders(cfg: TrainConfig, device: torch.device) -> Any:
     val_indices = indices[:n_val]
     train_indices = indices[n_val:]
 
-    pin_memory = device.type == "cuda"
-    persistent_workers = cfg.num_workers > 0
-
     loader_kwargs = {
         "batch_size": cfg.batch_size,
         "num_workers": cfg.num_workers,
-        "pin_memory": pin_memory,
-        "persistent_workers": persistent_workers,
+        "pin_memory": device.type == "cuda",
+        "persistent_workers": cfg.num_workers > 0,
     }
     if cfg.num_workers > 0:
         loader_kwargs["prefetch_factor"] = 2
@@ -76,5 +86,11 @@ def build_cifar10_dataloaders(cfg: TrainConfig, device: torch.device) -> Any:
         **loader_kwargs,
     )
 
-    return train_loader, val_loader, test_loader, len(train_indices), len(val_indices), len(test_dataset)
-
+    return (
+        train_loader,
+        val_loader,
+        test_loader,
+        len(train_indices),
+        len(val_indices),
+        len(test_dataset),
+    )

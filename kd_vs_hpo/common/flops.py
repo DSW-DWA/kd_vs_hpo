@@ -5,15 +5,18 @@ import torch.nn as nn
 from calflops import calculate_flops
 
 
-def count_flops_params(model: nn.Module, input_shape=(1, 3, 32, 32), device="cuda"):
+def count_flops_params(
+    model: nn.Module,
+    input_shape: tuple[int, ...] = (1, 3, 32, 32),
+    device: str = "cuda",
+) -> tuple[int, int]:
     model = model.to(device).eval()
-    flops, macs, params = calculate_flops(
+    flops, _, params = calculate_flops(
         model=model,
         input_shape=input_shape,
         output_as_string=False,
         print_results=False,
     )
-
     return int(flops), int(params)
 
 
@@ -39,7 +42,11 @@ def estimate_batch_flops(
     train_step_multiplier: float,
     device: torch.device,
 ) -> int:
-    forward_flops_per_sample, _ = count_flops_params(model, input_shape=(1, 3, 32, 32), device=str(device))
+    forward_flops_per_sample, _ = count_flops_params(
+        model,
+        input_shape=(1, 3, 32, 32),
+        device=str(device),
+    )
     forward_batch_flops = int(forward_flops_per_sample * batch_size)
     if train:
         return int(forward_batch_flops * train_step_multiplier)

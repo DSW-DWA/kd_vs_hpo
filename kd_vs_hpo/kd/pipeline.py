@@ -1,3 +1,4 @@
+import logging
 import time
 from dataclasses import asdict
 from typing import Any
@@ -9,11 +10,17 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
-from kd_vs_hpo.config import TrainConfig
-from kd_vs_hpo.dataloader import build_cifar10_dataloaders
-from kd_vs_hpo.flops import FlopsBudgetTracker, count_flops_params
-from kd_vs_hpo.utils import accuracy_top1_from_logits, checkpoint_path, extract_logits, set_seed, stage_checkpoint_path
-import logging
+from kd_vs_hpo.common.config import TrainConfig
+from kd_vs_hpo.common.dataloader import build_cifar10_dataloaders
+from kd_vs_hpo.common.flops import FlopsBudgetTracker, count_flops_params
+from kd_vs_hpo.common.optim import create_optimizer_and_scheduler
+from kd_vs_hpo.common.utils import (
+    accuracy_top1_from_logits,
+    checkpoint_path,
+    extract_logits,
+    set_seed,
+    stage_checkpoint_path,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -21,7 +28,14 @@ logger = logging.getLogger(__name__)
 
 FLOPS_NORM = 1e9
 
-def log_hparams(writer: SummaryWriter, config: TrainConfig, arch_record: dict[str, Any], params: int, flops_per_sample: int) -> None:
+
+def log_hparams(
+    writer: SummaryWriter,
+    config: TrainConfig,
+    arch_record: dict[str, Any],
+    params: int,
+    flops_per_sample: int,
+) -> None:
     writer.add_text("run/arch_str", str(arch_record.get("arch_str", "")))
     writer.add_text("run/arch_record", str(arch_record))
     writer.add_text("run/config", str(asdict(config)))
@@ -46,26 +60,6 @@ def log_epoch(
     writer.add_scalar("optim/lr", lr, epoch)
     writer.add_scalar("budget/cumulative_Gflops", cumulative_flops / FLOPS_NORM, epoch)
     writer.add_scalar("budget/remaining_Gflops", max(0, flops_budget - cumulative_flops) / FLOPS_NORM, epoch)
-
-
-def create_optimizer_and_scheduler(
-    model: nn.Module,
-    lr: float,
-    weight_decay: float,
-    schedule_max_epochs: int,
-    momentum: float,
-):
-    optimizer = torch.optim.SGD(
-        model.parameters(),
-        lr=lr,
-        momentum=momentum,
-        weight_decay=weight_decay,
-    )
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimizer,
-        T_max=max(1, schedule_max_epochs),
-    )
-    return optimizer, scheduler
 
 
 def train_one_epoch(
