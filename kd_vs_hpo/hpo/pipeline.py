@@ -254,6 +254,16 @@ def _run_architecture(
     epoch_flops = int(experiment.train.train_step_multiplier * forward_flops * n_train)
     validation_flops = forward_flops * n_val
     plan = make_plan(experiment.asha, epoch_flops, validation_flops)
+    logger.info(
+        "Starting architecture row=%s index=%s: initial_configs=%s rungs=%s "
+        "planned_flops=%s budget_flops=%s",
+        arch_record["arch_row"],
+        arch_record["arch_index"],
+        plan.num_initial_configs,
+        plan.rungs,
+        plan.planned_flops,
+        experiment.asha.budget_flops_per_arch,
+    )
     seed = experiment.train.seed + arch_record["arch_row"]
     trials = sample_trials(plan.num_initial_configs, experiment.search_space, seed)
     completed_epochs = {trial.trial_id: 0 for trial in trials}
@@ -264,6 +274,14 @@ def _run_architecture(
     records: list[dict[str, Any]] = []
 
     for rung, target_epochs in enumerate(plan.rungs):
+        logger.info(
+            "arch=%s rung=%s target_epochs=%s active_trials=%s budget_used=%.2f%%",
+            arch_record["arch_index"],
+            rung,
+            target_epochs,
+            len(alive),
+            100 * spent_flops / experiment.asha.budget_flops_per_arch,
+        )
         rung_records: list[dict[str, Any]] = []
         for trial in alive:
             incremental_epochs = target_epochs - completed_epochs[trial.trial_id]
@@ -322,6 +340,13 @@ def _run_architecture(
         ranked = sorted(rung_records, key=lambda row: row["val_acc1"], reverse=True)
         promoted_count = max(1, math.ceil(len(ranked) / plan.reduction_factor))
         promoted_ids = {row["trial_id"] for row in ranked[:promoted_count]}
+        logger.info(
+            "arch=%s rung=%s completed=%s promoted_trials=%s",
+            arch_record["arch_index"],
+            rung,
+            len(rung_records),
+            sorted(promoted_ids),
+        )
         alive = [trial for trial in alive if trial.trial_id in promoted_ids]
 
     result = pd.DataFrame(records)
@@ -373,8 +398,20 @@ def run_hpo_experiment(
     (experiment.output_dir / "checkpoints").mkdir(parents=True, exist_ok=True)
     architectures = _load_architectures(experiment.architectures_path, experiment.arch_rows)
     costs = _load_costs(experiment.costs_path)
+    logger.info(
+        "Loaded %s architectures from %s",
+        len(architectures),
+        experiment.architectures_path,
+    )
+    logger.info("Preparing CIFAR-10 dataloaders")
     train_loader, val_loader, test_loader, n_train, n_val, n_test = (
         build_cifar10_dataloaders(experiment.train, device)
+    )
+    logger.info(
+        "Dataset sizes: train=%s validation=%s test=%s",
+        n_train,
+        n_val,
+        n_test,
     )
 
     results = []

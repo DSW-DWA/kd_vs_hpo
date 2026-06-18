@@ -15,6 +15,8 @@ kd_vs_hpo/
 - `notebooks/kd1.ipynb` runs the fixed-hyperparameter baseline.
 - `notebooks/hpo_flops_budget.ipynb` runs HPO over learning rate and weight
   decay.
+- `notebooks/hpo_flops_budget.py` runs the same experiment from a terminal and
+  reports its progress to the console.
 - `experiments/` contains architecture definitions and their measured costs.
 
 ## Installing
@@ -31,3 +33,16 @@ correctly.
 The HPO pipeline writes CSV results to `hpo_output/` and automatically creates
 interactive, self-contained HTML charts in `hpo_output/plots/`. Set
 `HPOExperimentConfig(generate_plots=False)` to disable chart generation.
+
+Run the terminal version from the repository root:
+
+```shell
+python notebooks/hpo_flops_budget.py
+```
+
+Choose architecture rows explicitly or run all rows:
+
+```shell
+python notebooks/hpo_flops_budget.py --arch-rows 0 1 2
+python notebooks/hpo_flops_budget.py --arch-rows
+```
