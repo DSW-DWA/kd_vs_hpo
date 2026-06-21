@@ -65,7 +65,12 @@ def select_device(name: str) -> torch.device:
     if name == "auto":
         return torch.device("cuda" if torch.cuda.is_available() else "cpu")
     if name == "cuda" and not torch.cuda.is_available():
-        raise RuntimeError("CUDA was requested, but it is not available")
+        raise RuntimeError(
+            "CUDA was requested, but it is not available. "
+            f"Installed torch={torch.__version__}, "
+            f"torch CUDA runtime={torch.version.cuda}. "
+            "Install a PyTorch build compatible with the NVIDIA driver."
+        )
     return torch.device(name)
 
 
