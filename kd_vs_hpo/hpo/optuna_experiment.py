@@ -126,7 +126,7 @@ class PruningConfig:
 @dataclass(frozen=True)
 class OptunaExperimentConfig:
     train: TrainConfig = field(
-        default_factory=lambda: TrainConfig(num_workers=4),
+        default_factory=lambda: TrainConfig(num_workers=2),
     )
     search_space: OptunaSearchSpace = field(default_factory=OptunaSearchSpace)
     plateau: PlateauConfig = field(default_factory=PlateauConfig)
@@ -140,7 +140,7 @@ class OptunaExperimentConfig:
     pruners: tuple[PrunerName, ...] = DEFAULT_PRUNERS
     sampler_seeds: tuple[int, ...] = (42,)
     gpu_ids: tuple[int, ...] | None = None
-    workers_per_gpu: int = 8
+    workers_per_gpu: int = 4
     torch_threads_per_worker: int = 1
     tpe_startup_trials: int = 20
     gp_startup_trials: int = 20
@@ -262,6 +262,31 @@ def _finite_or_none(value: Any) -> Any:
     if isinstance(value, (float, np.floating)) and not math.isfinite(float(value)):
         return None
     return value
+
+
+def _configure_runtime_environment() -> Path:
+    thread_count = os.environ.get("KD_VS_HPO_BLAS_THREADS", "1")
+    for variable in (
+        "OPENBLAS_NUM_THREADS",
+        "OMP_NUM_THREADS",
+        "MKL_NUM_THREADS",
+        "NUMEXPR_NUM_THREADS",
+        "VECLIB_MAXIMUM_THREADS",
+    ):
+        os.environ[variable] = thread_count
+
+    if os.name == "nt":
+        default_temp = (
+            Path(os.environ.get("TEMP", Path.home() / "AppData/Local/Temp"))
+            / "kd_vs_hpo"
+        )
+    else:
+        default_temp = Path(f"/tmp/kd_vs_hpo_{os.getuid()}")
+    temp_root = Path(os.environ.get("KD_VS_HPO_TMPDIR", default_temp))
+    temp_root.mkdir(parents=True, exist_ok=True)
+    for variable in ("TMPDIR", "TMP", "TEMP"):
+        os.environ[variable] = str(temp_root)
+    return temp_root
 
 
 def _validate_config(config: OptunaExperimentConfig) -> None:
@@ -1352,6 +1377,7 @@ def _build_study_tasks(
 def run_optuna_experiment(
     config: OptunaExperimentConfig,
 ) -> OptunaExperimentResult:
+    temp_root = _configure_runtime_environment()
     _validate_config(config)
     config.output_dir.mkdir(parents=True, exist_ok=True)
     _write_json(config.output_dir / "experiment_config.json", asdict(config))
@@ -1374,10 +1400,14 @@ def run_optuna_experiment(
     gpu_ids = _resolve_gpu_ids(config)
     workers_per_device = config.workers_per_gpu if gpu_ids[0] is not None else 1
     logger.info(
-        "Starting %s studies on devices=%s workers_per_device=%s",
+        "Starting %s studies on devices=%s workers_per_device=%s "
+        "dataloader_workers=%s BLAS_threads=%s temp_root=%s",
         len(tasks),
         gpu_ids,
         workers_per_device,
+        config.train.num_workers,
+        os.environ["OPENBLAS_NUM_THREADS"],
+        temp_root,
     )
 
     context = mp.get_context("spawn")

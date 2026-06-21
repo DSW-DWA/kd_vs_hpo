@@ -1,11 +1,39 @@
 import argparse
 import logging
+import os
 from pathlib import Path
 
-import torch
 
-from kd_vs_hpo.common.config import TrainConfig
-from kd_vs_hpo.hpo.optuna_experiment import (
+def _configure_process_environment() -> None:
+    thread_count = os.environ.get("KD_VS_HPO_BLAS_THREADS", "1")
+    for variable in (
+        "OPENBLAS_NUM_THREADS",
+        "OMP_NUM_THREADS",
+        "MKL_NUM_THREADS",
+        "NUMEXPR_NUM_THREADS",
+        "VECLIB_MAXIMUM_THREADS",
+    ):
+        os.environ[variable] = thread_count
+
+    if os.name == "nt":
+        default_temp = (
+            Path(os.environ.get("TEMP", Path.home() / "AppData/Local/Temp"))
+            / "kd_vs_hpo"
+        )
+    else:
+        default_temp = Path(f"/tmp/kd_vs_hpo_{os.getuid()}")
+    temp_root = Path(os.environ.get("KD_VS_HPO_TMPDIR", default_temp))
+    temp_root.mkdir(parents=True, exist_ok=True)
+    for variable in ("TMPDIR", "TMP", "TEMP"):
+        os.environ[variable] = str(temp_root)
+
+
+_configure_process_environment()
+
+import torch  # noqa: E402
+
+from kd_vs_hpo.common.config import TrainConfig  # noqa: E402
+from kd_vs_hpo.hpo.optuna_experiment import (  # noqa: E402
     DEFAULT_PRUNERS,
     DEFAULT_SAMPLERS,
     OptunaExperimentConfig,
@@ -48,10 +76,10 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--sampler-seeds", type=int, nargs="+", default=[42])
     parser.add_argument("--gpu-ids", type=int, nargs="*", default=None)
-    parser.add_argument("--workers-per-gpu", type=int, default=8)
+    parser.add_argument("--workers-per-gpu", type=int, default=4)
     parser.add_argument("--torch-threads-per-worker", type=int, default=1)
     parser.add_argument("--batch-size", type=int, default=256)
-    parser.add_argument("--dataloader-workers", type=int, default=4)
+    parser.add_argument("--dataloader-workers", type=int, default=2)
     parser.add_argument("--max-epochs", type=int, default=300)
     parser.add_argument("--plateau-warmup-epochs", type=int, default=30)
     parser.add_argument("--plateau-patience", type=int, default=25)
