@@ -7,4 +7,9 @@ wheels/
 *.egg-info
 
 # Virtual environments
-.venv/
+.venv*/
+
+# Experiment outputs
+data/
+runs/
+hpo_output/
