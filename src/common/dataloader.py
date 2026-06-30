@@ -5,7 +5,7 @@ import torchvision.datasets as datasets
 import torchvision.transforms as T
 from torch.utils.data import DataLoader, Subset
 
-from kd_vs_hpo.common.config import TrainConfig
+from src.common.config import TrainConfig
 
 
 normalize_kwargs = {

@@ -5,8 +5,8 @@ from pathlib import Path
 
 import torch
 
-from kd_vs_hpo.common import TrainConfig
-from kd_vs_hpo.hpo import (
+from src.common import TrainConfig
+from src.hpo import (
     ASHAConfig,
     HPOExperimentConfig,
     SearchSpace,

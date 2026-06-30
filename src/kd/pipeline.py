@@ -10,11 +10,11 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
-from kd_vs_hpo.common.config import TrainConfig
-from kd_vs_hpo.common.dataloader import build_cifar10_dataloaders
-from kd_vs_hpo.common.flops import FlopsBudgetTracker, count_flops_params
-from kd_vs_hpo.common.optim import create_optimizer_and_scheduler
-from kd_vs_hpo.common.utils import (
+from src.common.config import TrainConfig
+from src.common.dataloader import build_cifar10_dataloaders
+from src.common.flops import FlopsBudgetTracker, count_flops_params
+from src.common.optim import create_optimizer_and_scheduler
+from src.common.utils import (
     accuracy_top1_from_logits,
     checkpoint_path,
     extract_logits,

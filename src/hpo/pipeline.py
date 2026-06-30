@@ -15,17 +15,17 @@ import torch.nn as nn
 from torch.amp import GradScaler
 from torch.utils.data import DataLoader
 
-from kd_vs_hpo.common.dataloader import build_cifar10_dataloaders
-from kd_vs_hpo.common.nats import create_nats_model
-from kd_vs_hpo.common.optim import create_optimizer_and_scheduler
-from kd_vs_hpo.common.utils import (
+from src.common.dataloader import build_cifar10_dataloaders
+from src.common.nats import create_nats_model
+from src.common.optim import create_optimizer_and_scheduler
+from src.common.utils import (
     accuracy_top1_from_logits,
     extract_logits,
     set_seed,
 )
-from kd_vs_hpo.hpo.asha import ASHAPlan, TrialConfig, make_plan, sample_trials
-from kd_vs_hpo.hpo.config import HPOExperimentConfig
-from kd_vs_hpo.hpo.plotting import save_hpo_plots
+from src.hpo.asha import ASHAPlan, TrialConfig, make_plan, sample_trials
+from src.hpo.config import HPOExperimentConfig
+from src.hpo.plotting import save_hpo_plots
 
 logger = logging.getLogger(__name__)
 

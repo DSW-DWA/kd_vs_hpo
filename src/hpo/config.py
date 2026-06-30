@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from kd_vs_hpo.common.config import TrainConfig
+from src.common.config import TrainConfig
 
 
 @dataclass(frozen=True)

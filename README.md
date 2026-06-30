@@ -53,25 +53,3 @@ Use both GPUs and train four models concurrently on each GPU:
 python notebooks/hpo_flops_budget.py --gpu-ids 0 1 --workers-per-gpu 4
 ```
 
-## Optuna experiment
-
-Run the full Optuna matrix on the two-GPU Ubuntu server:
-
-```shell
-python notebooks/hpo_optuna.py \
-  --gpu-ids 0 1 \
-  --workers-per-gpu 4 \
-  --dataloader-workers 2 \
-  --output-dir optuna_output
-```
-
-The launcher limits OpenBLAS, OMP and MKL to one CPU thread per training
-process. Multiprocessing temporary files are written to
-`/tmp/kd_vs_hpo_<uid>` instead of the project directory. Both settings can be
-overridden:
-
-```shell
-KD_VS_HPO_BLAS_THREADS=1 \
-KD_VS_HPO_TMPDIR=/tmp/kd_vs_hpo_$UID \
-python notebooks/hpo_optuna.py --gpu-ids 0 1
-```
