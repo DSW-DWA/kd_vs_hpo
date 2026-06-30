@@ -11,42 +11,65 @@ from src.hpo.infrastructure.training import evaluate
 
 @dataclass(frozen=True)
 class HPOExperimentResult:
-    stages: pd.DataFrame
+    epochs: pd.DataFrame
+    trials: pd.DataFrame
+    studies: pd.DataFrame
     summary: pd.DataFrame
-    stages_path: Path
-    summary_path: Path
+    output_dir: Path
+    event_log_path: Path
     plot_paths: tuple[Path, ...]
 
 
-def build_summary(
-    stages: pd.DataFrame,
+def build_study_summary(trials: pd.DataFrame) -> pd.DataFrame:
+    rows = []
+    for study_name, group in trials.groupby("study_name", sort=False):
+        complete = group.loc[group["state"] == "COMPLETE"]
+        best = complete.sort_values("best_val_acc1").tail(1)
+        base = group.iloc[0]
+        rows.append(
+            {
+                "study_name": study_name,
+                "strategy": base["strategy"],
+                "sampler": base["sampler"],
+                "pruner": base["pruner"],
+                "arch_row": base["arch_row"],
+                "arch_index": base["arch_index"],
+                "complete_trials": int((group["state"] == "COMPLETE").sum()),
+                "pruned_trials": int((group["state"] == "PRUNED").sum()),
+                "total_train_flops": int(group["train_flops"].sum()),
+                "total_validation_flops": int(group["validation_flops"].sum()),
+                "total_study_flops": int(group["total_flops"].sum()),
+                "best_val_acc1": (
+                    float(best.iloc[0]["best_val_acc1"]) if not best.empty else None
+                ),
+                "best_trial_id": int(best.iloc[0]["trial_id"]) if not best.empty else None,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def build_architecture_summary(
+    trials: pd.DataFrame,
     test_loader: DataLoader,
-    n_test: int,
     device: torch.device,
 ) -> pd.DataFrame:
-    if stages.empty:
+    complete = trials.loc[trials["state"] == "COMPLETE"]
+    if complete.empty:
         return pd.DataFrame()
-    summary = (
-        stages.sort_values(["arch_row", "val_acc1"])
+    best = (
+        complete.sort_values(["arch_row", "best_val_acc1"])
         .groupby("arch_row", as_index=False)
         .tail(1)
-        .sort_values("val_acc1", ascending=False)
+        .sort_values("best_val_acc1", ascending=False)
         .copy()
     )
-    spent = stages.groupby("arch_row").agg(
-        spent_flops=("stage_flops", "sum"),
-        spent_train_flops=("train_flops", "sum"),
-        spent_validation_flops=("validation_flops", "sum"),
-        completed_stages=("status", "size"),
-    )
-    summary = summary.join(spent, on="arch_row")
-    summary["spent_budget_ratio"] = summary["spent_flops"] / summary["budget_flops"]
-    summary["test_acc1"] = [
-        _evaluate_checkpoint(row.checkpoint_path, test_loader, device)
-        for row in summary.itertuples()
+    architecture_flops = trials.groupby("arch_row")["total_flops"].sum()
+    best = best.join(architecture_flops.rename("total_hpo_flops"), on="arch_row")
+    best["test_acc1"] = [
+        _evaluate_checkpoint(path, test_loader, device)
+        for path in best["checkpoint_path"]
     ]
-    summary["test_flops"] = summary["forward_flops_per_sample"] * n_test
-    return summary
+    return best
 
 
 def _evaluate_checkpoint(
