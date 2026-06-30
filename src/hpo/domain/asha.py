@@ -2,7 +2,7 @@ import math
 import random
 from dataclasses import dataclass
 
-from src.hpo.config import ASHAConfig, SearchSpace
+from src.hpo.domain.config import ASHAConfig, SearchSpace
 
 
 @dataclass(frozen=True)

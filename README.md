@@ -4,14 +4,18 @@ Experiments on NATS-Bench architectures with shared CIFAR-10 infrastructure
 and a FLOPs budget.
 
 ```text
-kd_vs_hpo/
+src/
 ├── common/  # datasets, FLOPs, NATS models, optimizers and utilities
 ├── kd/      # fixed-hyperparameter/KD experiment pipeline
-└── hpo/     # ASHA-based hyperparameter optimization
+└── hpo/     # layered ASHA-based hyperparameter optimization
+    ├── domain/          # configuration and ASHA rules
+    ├── application/     # experiment and architecture use cases
+    ├── infrastructure/  # training, checkpoints and GPU workers
+    └── reporting/       # result tables and plots
 ```
 
-- `kd_vs_hpo/common/` is shared by both experiments.
-- `kd_vs_hpo/kd/` and `kd_vs_hpo/hpo/` are independent experiment packages.
+- `src/common/` is shared by both experiments.
+- `src/kd/` and `src/hpo/` are independent experiment packages.
 - `notebooks/kd1.ipynb` runs the fixed-hyperparameter baseline.
 - `notebooks/hpo_flops_budget.ipynb` runs HPO over learning rate and weight
   decay.

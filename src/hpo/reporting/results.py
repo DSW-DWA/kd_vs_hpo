@@ -6,7 +6,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from src.common.nats import create_nats_model
-from src.hpo.training import evaluate
+from src.hpo.infrastructure.training import evaluate
 
 
 @dataclass(frozen=True)

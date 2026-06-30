@@ -7,11 +7,11 @@ import pandas as pd
 import torch
 
 from src.common.dataloader import build_cifar10_dataloaders
-from src.hpo.config import HPOExperimentConfig
-from src.hpo.plotting import save_hpo_plots
-from src.hpo.results import HPOExperimentResult, build_summary
-from src.hpo.search import run_architecture
-from src.hpo.workers import ParallelStageRunner
+from src.hpo.application.search import run_architecture
+from src.hpo.domain.config import HPOExperimentConfig
+from src.hpo.infrastructure.workers import ParallelStageRunner
+from src.hpo.reporting.plotting import save_hpo_plots
+from src.hpo.reporting.results import HPOExperimentResult, build_summary
 
 logger = logging.getLogger(__name__)
 

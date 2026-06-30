@@ -9,10 +9,10 @@ import pandas as pd
 import torch
 from torch.utils.data import DataLoader
 
-from src.hpo.asha import ASHAPlan, TrialConfig, make_plan, sample_trials
-from src.hpo.config import HPOExperimentConfig
-from src.hpo.training import run_training_stage
-from src.hpo.workers import ParallelStageRunner, TrainingStageTask
+from src.hpo.domain.asha import ASHAPlan, TrialConfig, make_plan, sample_trials
+from src.hpo.domain.config import HPOExperimentConfig
+from src.hpo.infrastructure.training import run_training_stage
+from src.hpo.infrastructure.workers import ParallelStageRunner, TrainingStageTask
 
 logger = logging.getLogger(__name__)
 

@@ -8,9 +8,9 @@ import torch
 from torch.utils.data import DataLoader
 
 from src.common.dataloader import build_cifar10_dataloaders
-from src.hpo.asha import ASHAPlan, TrialConfig
-from src.hpo.config import HPOExperimentConfig
-from src.hpo.training import run_training_stage
+from src.hpo.domain.asha import ASHAPlan, TrialConfig
+from src.hpo.domain.config import HPOExperimentConfig
+from src.hpo.infrastructure.training import run_training_stage
 
 logger = logging.getLogger(__name__)
 

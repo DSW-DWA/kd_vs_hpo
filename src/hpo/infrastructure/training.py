@@ -13,8 +13,8 @@ from torch.utils.data import DataLoader
 from src.common.nats import create_nats_model
 from src.common.optim import create_optimizer_and_scheduler
 from src.common.utils import accuracy_top1_from_logits, extract_logits, set_seed
-from src.hpo.asha import ASHAPlan, TrialConfig
-from src.hpo.config import HPOExperimentConfig
+from src.hpo.domain.asha import ASHAPlan, TrialConfig
+from src.hpo.domain.config import HPOExperimentConfig
 
 logger = logging.getLogger(__name__)
 

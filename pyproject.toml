@@ -23,7 +23,7 @@ dependencies = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["kd_vs_hpo*"]
+include = ["src*"]
 
 [dependency-groups]
 dev = [
