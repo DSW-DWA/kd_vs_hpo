@@ -16,3 +16,4 @@ class TrainConfig:
     data_root: Path = Path("data")
     checkpoint_dir: Path = Path("checkpoints")
     log_dir: Path = Path("runs")
+    kd_temperature: float = 2.0
