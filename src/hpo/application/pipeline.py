@@ -363,6 +363,14 @@ def _validate(experiment: HPOExperimentConfig) -> None:
     search = experiment.search_space
     if not search.grid_lr or not search.grid_weight_decay:
         raise ValueError("Grid search values cannot be empty")
+    if not search.lr[0] <= search.initial_lr <= search.lr[1]:
+        raise ValueError("initial_lr must be within lr bounds")
+    if not (
+        search.weight_decay[0]
+        <= search.initial_weight_decay
+        <= search.weight_decay[1]
+    ):
+        raise ValueError("initial_weight_decay must be within weight_decay bounds")
     if any(value < search.lr[0] or value > search.lr[1] for value in search.grid_lr):
         raise ValueError("grid_lr values must be within lr bounds")
     if any(
@@ -370,6 +378,13 @@ def _validate(experiment: HPOExperimentConfig) -> None:
         for value in search.grid_weight_decay
     ):
         raise ValueError("grid_weight_decay values must be within weight_decay bounds")
+    if "grid" in optuna_config.samplers and search.initial_lr not in search.grid_lr:
+        raise ValueError("initial_lr must be present in grid_lr")
+    if (
+        "grid" in optuna_config.samplers
+        and search.initial_weight_decay not in search.grid_weight_decay
+    ):
+        raise ValueError("initial_weight_decay must be present in grid_weight_decay")
 
 
 def _save_tables(output_dir: Path, *tables: pd.DataFrame) -> None:

@@ -10,26 +10,19 @@ PrunerName = Literal["successive_halving", "hyperband"]
 
 @dataclass(frozen=True)
 class SearchSpace:
-    lr: tuple[float, float] = (1e-4, 1.0)
-    weight_decay: tuple[float, float] = (1e-7, 1e-2)
+    lr: tuple[float, float] = (4.5e-2, 5.5e-2)
+    weight_decay: tuple[float, float] = (4.5e-4, 5.5e-4)
+    initial_lr: float = 5.0e-2
+    initial_weight_decay: float = 5.0e-4
     grid_lr: tuple[float, ...] = (
-        1e-4,
-        3e-4,
-        1e-3,
-        3e-3,
-        1e-2,
-        3e-2,
-        1e-1,
-        3e-1,
-        1.0,
+        4.5e-2,
+        5.0e-2,
+        5.5e-2,
     )
     grid_weight_decay: tuple[float, ...] = (
-        1e-7,
-        1e-6,
-        1e-5,
-        1e-4,
-        1e-3,
-        1e-2,
+        4.5e-4,
+        5.0e-4,
+        5.5e-4,
     )
 
 

@@ -58,6 +58,8 @@ def run_study(
         sampler=_create_sampler(sampler_name, seed, experiment),
         pruner=_create_pruner(pruner_name, experiment),
     )
+    initial_trial = _initial_trial_parameters(experiment)
+    study.enqueue_trial(initial_trial)
     study_started = time.perf_counter()
     event_log.emit(
         "study_started",
@@ -70,6 +72,7 @@ def run_study(
         seed=seed,
         planned_trials=experiment.optuna.n_trials,
         max_epochs=experiment.optuna.max_epochs,
+        initial_trial=initial_trial,
         forward_flops_per_sample=forward_flops_per_sample,
         train_flops_per_epoch=train_flops_per_epoch,
         validation_flops_per_epoch=validation_flops_per_epoch,
@@ -328,7 +331,8 @@ def _create_sampler(
         )
     if name == "cmaes":
         return optuna.samplers.CmaEsSampler(
-            seed=seed, n_startup_trials=experiment.optuna.startup_trials
+            seed=seed,
+            n_startup_trials=experiment.optuna.startup_trials,
         )
     if name == "gp":
         return optuna.samplers.GPSampler(
@@ -354,6 +358,13 @@ def _create_pruner(
             reduction_factor=config.reduction_factor,
         )
     raise ValueError(f"Unsupported pruner: {name}")
+
+
+def _initial_trial_parameters(experiment: HPOExperimentConfig) -> dict[str, float]:
+    return {
+        "lr": experiment.search_space.initial_lr,
+        "weight_decay": experiment.search_space.initial_weight_decay,
+    }
 
 
 def _checkpoint_path(output_dir: Path, study_name: str, trial_id: int) -> Path:
