@@ -32,34 +32,6 @@ def set_eval_and_freeze(models):
             p.requires_grad_(False)
 
 
-@torch.inference_mode()
-def get_teacher_soft_targets(teachers, inputs, temperature=4.0, teacher_weights=None):
-    """
-    Returns averaged softened teacher probabilities.
-    teachers: list of frozen teacher models
-    inputs: batch inputs
-    temperature: KD temperature
-    teacher_weights: optional list/tuple of weights, same length as teachers
-    """
-    n = len(teachers)
-    if n == 0:
-        raise ValueError("teachers must be a non-empty list")
-
-    if teacher_weights is None:
-        teacher_weights = [1.0 / n] * n
-    else:
-        if len(teacher_weights) != n:
-            raise ValueError("teacher_weights must have the same length as teachers")
-        s = float(sum(teacher_weights))
-        teacher_weights = [w / s for w in teacher_weights]
-
-    soft_targets = None
-    for teacher, w in zip(teachers, teacher_weights):
-        logits = teacher(inputs)
-        probs = F.softmax(logits / temperature, dim=-1)
-        soft_targets = probs.mul(w) if soft_targets is None else soft_targets.add_(probs, alpha=w)
-
-    return soft_targets
 
 
 def kd_loss(student_logits, teacher_soft_targets, temperature=4.0):

@@ -44,3 +44,24 @@ def estimate_batch_flops(
     if train:
         return int(forward_batch_flops * train_step_multiplier)
     return forward_batch_flops
+
+
+@dataclass
+class FlopsTracker:
+
+    enabled: bool = True
+    spent: int = 0
+
+    def add(
+        self,
+        flops: int,
+    ):
+
+        if not self.enabled:
+            return
+
+        self.spent += int(flops)
+
+    def reset(self):
+
+        self.spent = 0
