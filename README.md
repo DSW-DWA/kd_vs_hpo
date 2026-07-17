@@ -1,95 +1,54 @@
-# KD and HPO recipes
+# HPO experiments
 
-Experiments on NATS-Bench architectures with shared CIFAR-10 infrastructure
-and detailed FLOPs accounting.
+Optuna HPO experiments for NATS-Bench architectures on CIFAR-10.
 
-```text
-src/
-├── common/  # datasets, FLOPs, NATS models, optimizers and utilities
-├── kd/      # fixed-hyperparameter/KD experiment pipeline
-└── hpo/     # Optuna hyperparameter optimization
-    ├── domain/          # configuration and stopping rules
-    ├── application/     # experiment and architecture use cases
-    ├── infrastructure/  # training, checkpoints and GPU workers
-    └── reporting/       # result tables and plots
-```
+## Installation
 
-- `src/common/` is shared by both experiments.
-- `src/kd/` and `src/hpo/` are independent experiment packages.
-- `notebooks/kd1.ipynb` runs the fixed-hyperparameter baseline.
-- `notebooks/hpo_optuna.py` compares Optuna samplers with Successive Halving
-  and Hyperband pruners.
-- `experiments/` contains architecture definitions and their measured costs.
-
-## Installing
-
-Python 3.11 is required.
+Python 3.11 and [uv](https://docs.astral.sh/uv/) are required.
 
 ```shell
 make install
+source .venv/bin/activate
 ```
 
-Run notebooks from the repository root so their relative paths resolve
-correctly.
+Run all commands from the project root.
 
-The HPO pipeline writes CSV results to `hpo_output/` and automatically creates
-interactive, self-contained HTML charts in `hpo_output/plots/`. Set
-`HPOExperimentConfig(generate_plots=False)` to disable chart generation.
-
-Run the terminal version from the repository root:
+## Running HPO
 
 ```shell
-python notebooks/hpo_optuna.py
+python notebooks/hpo_optuna.py [arguments]
 ```
 
-Choose architecture rows explicitly or run all rows:
+Each architecture, sampler, and pruner combination runs as a separate Optuna
+study.
+
+- `--arch-rows ROW [ROW ...]` — architecture row numbers. The default is `0`;
+  passing the flag without values selects all architectures.
+- `--n-trials N` — maximum number of trials per study. The default is `20`.
+  The default GridSampler search space requires at least `9`.
+- `--max-epochs N` — maximum number of training epochs per trial. The default
+  is `200`. Successive Halving and Hyperband require at least `10`.
+- `--output-dir PATH` — output directory. The default is `hpo_output`.
+- `--samplers NAME [NAME ...]` — samplers to run. Accepted values are `tpe`,
+  `grid`, `cmaes`, and `gp`; all four are enabled by default.
+- `--pruners NAME [NAME ...]` — pruners to run. Accepted values are `none`,
+  `successive_halving`, and `hyperband`; `successive_halving` and `hyperband`
+  are enabled by default.
+- `--device DEVICE` — compute device. Accepted values are `auto`, `cpu`,
+  `cuda`, and `mps`; the default is `auto`. Automatic selection prefers CUDA,
+  then MPS, then CPU.
+- `--processes N` — number of studies to run in parallel. The default is `1`.
+- `--gpu-ids ID [ID ...]` — CUDA device IDs used by worker processes. When
+  omitted, all available CUDA devices are used.
+- `-h`, `--help` — show the CLI help message and exit.
+
+Show all available arguments:
 
 ```shell
-python notebooks/hpo_optuna.py --arch-rows 0 1 2
-python notebooks/hpo_optuna.py --arch-rows
+python notebooks/hpo_optuna.py --help
 ```
 
-Configure trial count and the accuracy-growth stopping threshold:
+## Results
 
-```shell
-python notebooks/hpo_optuna.py --n-trials 20 --lambda-growth 0.05
-```
-
-Run four study processes on CPU:
-
-```shell
-python notebooks/hpo_optuna.py --device cpu --processes 4
-```
-
-Distribute four study processes across two GPUs:
-
-```shell
-python notebooks/hpo_optuna.py --device cuda --processes 4 --gpu-ids 0 1
-```
-
-Parallelism is study-level: every process trains one independent
-`architecture × sampler × pruner` study at a time. GPU-specific process pools
-keep the configured number of workers assigned to each GPU. Each study process
-also creates the number of DataLoader workers configured by `TrainConfig`.
-
-For each architecture the experiment compares TPE, Grid, CMA-ES and GP samplers
-with only two pruners: Successive Halving and Hyperband. A training trial stops
-after warmup when the best validation accuracy growth over the patience window
-is below `lambda-growth`, or when accuracy does not grow at all. Pruners may
-discard unpromising trials earlier.
-
-Every run writes merged structured events to `hpo_output/logs/events.jsonl`.
-Raw per-process logs are retained under `hpo_output/logs/runs/<run_id>/`.
-Each record contains a UTC timestamp and run ID. Logged events cover experiment,
-dataset, architecture, study, trial, epoch, checkpoint, pruning, early stopping,
-test evaluation, table export, plots, timing and failures. Epoch records include
-loss, validation accuracy, best accuracy, accuracy growth, learning rates,
-pruner decision, train/validation duration and peak GPU memory. The file is
-flushed after every event so completed records survive an interrupted run.
-
-The same events are printed to the console with process names while the run is
-active. FLOPs are estimated per epoch as
-`train_step_multiplier × forward_flops × train_samples` for training and
-`forward_flops × validation_samples` for validation. Epoch, trial, study and
-whole-experiment cumulative FLOPs are included in JSONL and CSV tables.
-
+CSV tables are written to `hpo_output/tables`, checkpoints to
+`hpo_output/checkpoints`, and logs to `hpo_output/logs`.
