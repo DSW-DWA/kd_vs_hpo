@@ -51,4 +51,6 @@ python notebooks/hpo_optuna.py --help
 ## Results
 
 CSV tables are written to `hpo_output/tables`, checkpoints to
-`hpo_output/checkpoints`, and logs to `hpo_output/logs`.
+`hpo_output/checkpoints`, and the resolved run configuration to
+`hpo_output/run_config.json`. Interrupted trial data remains in
+`hpo_output/recovery` until the next run.

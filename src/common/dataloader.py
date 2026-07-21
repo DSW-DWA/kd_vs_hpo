@@ -3,7 +3,7 @@ from typing import Any
 import torch
 import torchvision.datasets as datasets
 import torchvision.transforms as T
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import DataLoader, Dataset, Subset
 
 from src.common.config import TrainConfig
 
@@ -30,10 +30,9 @@ eval_transform = T.Compose(
 )
 
 
-def build_cifar10_dataloaders(cfg: TrainConfig, device: torch.device) -> Any:
-    cfg.checkpoint_dir.mkdir(parents=True, exist_ok=True)
-    cfg.log_dir.mkdir(parents=True, exist_ok=True)
-
+def build_cifar10_datasets(
+    cfg: TrainConfig,
+) -> tuple[Dataset[Any], Dataset[Any], Dataset[Any]]:
     train_aug_dataset = datasets.CIFAR10(
         root=cfg.data_root,
         train=True,
@@ -60,7 +59,22 @@ def build_cifar10_dataloaders(cfg: TrainConfig, device: torch.device) -> Any:
     val_indices = indices[:n_val]
     train_indices = indices[n_val:]
 
-    loader_kwargs = {
+    return (
+        Subset(train_aug_dataset, train_indices),
+        Subset(train_eval_dataset, val_indices),
+        test_dataset,
+    )
+
+
+def build_dataloader(
+    dataset: Dataset[Any],
+    cfg: TrainConfig,
+    device: torch.device,
+    *,
+    shuffle: bool,
+    seed: int,
+) -> DataLoader[Any]:
+    loader_kwargs: dict[str, Any] = {
         "batch_size": cfg.batch_size,
         "num_workers": cfg.num_workers,
         "pin_memory": device.type == "cuda",
@@ -69,28 +83,45 @@ def build_cifar10_dataloaders(cfg: TrainConfig, device: torch.device) -> Any:
     if cfg.num_workers > 0:
         loader_kwargs["prefetch_factor"] = 2
 
-    train_loader = DataLoader(
-        Subset(train_aug_dataset, train_indices),
+    return DataLoader(
+        dataset,
+        shuffle=shuffle,
+        generator=torch.Generator().manual_seed(seed),
+        **loader_kwargs,
+    )
+
+
+def build_cifar10_dataloaders(cfg: TrainConfig, device: torch.device) -> Any:
+    cfg.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    cfg.log_dir.mkdir(parents=True, exist_ok=True)
+    train_dataset, val_dataset, test_dataset = build_cifar10_datasets(cfg)
+    train_loader = build_dataloader(
+        train_dataset,
+        cfg,
+        device,
         shuffle=True,
-        generator=torch.Generator().manual_seed(cfg.seed),
-        **loader_kwargs,
+        seed=cfg.seed,
     )
-    val_loader = DataLoader(
-        Subset(train_eval_dataset, val_indices),
+    val_loader = build_dataloader(
+        val_dataset,
+        cfg,
+        device,
         shuffle=False,
-        **loader_kwargs,
+        seed=cfg.seed + 1,
     )
-    test_loader = DataLoader(
+    test_loader = build_dataloader(
         test_dataset,
+        cfg,
+        device,
         shuffle=False,
-        **loader_kwargs,
+        seed=cfg.seed + 2,
     )
 
     return (
         train_loader,
         val_loader,
         test_loader,
-        len(train_indices),
-        len(val_indices),
+        len(train_dataset),
+        len(val_dataset),
         len(test_dataset),
     )

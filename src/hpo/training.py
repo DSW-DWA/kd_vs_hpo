@@ -1,3 +1,5 @@
+"""Training and evaluation helpers used by HPO studies."""
+
 import torch
 import torch.nn as nn
 from torch.amp import GradScaler

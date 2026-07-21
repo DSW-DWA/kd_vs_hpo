@@ -1,12 +1,14 @@
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 import torch
 from torch.utils.data import DataLoader
 
 from src.common.nats import create_nats_model
-from src.hpo.infrastructure.training import evaluate
+from src.hpo.persistence import TRIAL_METADATA_FIELDS
+from src.hpo.training import evaluate
 
 
 @dataclass(frozen=True)
@@ -16,8 +18,48 @@ class HPOExperimentResult:
     studies: pd.DataFrame
     summary: pd.DataFrame
     output_dir: Path
-    event_log_path: Path
-    plot_paths: tuple[Path, ...]
+
+
+def build_experiment_result(
+    *,
+    trial_records: list[dict[str, Any]],
+    epoch_records: list[dict[str, Any]],
+    costs: dict[int, dict[str, Any]],
+    n_test: int,
+    test_loader: DataLoader,
+    evaluation_device: torch.device,
+    output_dir: Path,
+) -> HPOExperimentResult:
+    raw_trials = pd.DataFrame(trial_records).sort_values(
+        ["study_name", "trial_id"],
+        ignore_index=True,
+    )
+    epochs = pd.DataFrame(epoch_records).sort_values(
+        ["study_name", "trial_id", "epoch"],
+        ignore_index=True,
+    )
+    studies = build_study_summary(raw_trials)
+
+    summary = build_architecture_summary(
+        raw_trials,
+        test_loader,
+        evaluation_device,
+    )
+    if not summary.empty:
+        summary["test_flops"] = summary["arch_row"].map(
+            lambda row: int(costs[int(row)]["forward_flops_per_sample"]) * n_test
+        )
+        summary["total_experiment_flops"] = (
+            summary["total_hpo_flops"] + summary["test_flops"]
+        )
+
+    return HPOExperimentResult(
+        epochs=epochs,
+        trials=raw_trials.drop(columns=list(TRIAL_METADATA_FIELDS)),
+        studies=studies,
+        summary=summary,
+        output_dir=output_dir,
+    )
 
 
 def build_study_summary(trials: pd.DataFrame) -> pd.DataFrame:
@@ -29,7 +71,6 @@ def build_study_summary(trials: pd.DataFrame) -> pd.DataFrame:
         rows.append(
             {
                 "study_name": study_name,
-                "strategy": base["strategy"],
                 "sampler": base["sampler"],
                 "pruner": base["pruner"],
                 "arch_row": base["arch_row"],
@@ -42,10 +83,15 @@ def build_study_summary(trials: pd.DataFrame) -> pd.DataFrame:
                 "best_val_acc1": (
                     float(best.iloc[0]["best_val_acc1"]) if not best.empty else None
                 ),
-                "best_trial_id": int(best.iloc[0]["trial_id"]) if not best.empty else None,
+                "best_trial_id": int(best.iloc[0]["trial_id"])
+                if not best.empty
+                else None,
             }
         )
-    return pd.DataFrame(rows)
+    return pd.DataFrame(rows).sort_values(
+        ["arch_row", "sampler", "pruner"],
+        ignore_index=True,
+    )
 
 
 def build_architecture_summary(
@@ -57,10 +103,22 @@ def build_architecture_summary(
     if complete.empty:
         return pd.DataFrame()
     best = (
-        complete.sort_values(["arch_row", "best_val_acc1"])
-        .groupby("arch_row", as_index=False)
-        .tail(1)
-        .sort_values("best_val_acc1", ascending=False)
+        complete.sort_values(
+            [
+                "arch_row",
+                "best_val_acc1",
+                "total_flops",
+                "study_name",
+                "trial_id",
+            ],
+            ascending=[True, False, True, True, True],
+        )
+        .groupby("arch_row", as_index=False, sort=False)
+        .head(1)
+        .sort_values(
+            ["best_val_acc1", "arch_row"],
+            ascending=[False, True],
+        )
         .copy()
     )
     architecture_flops = trials.groupby("arch_row")["total_flops"].sum()
