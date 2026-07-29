@@ -13,7 +13,7 @@ from src.plain_training import (
     INITIAL_LR,
     INITIAL_WEIGHT_DECAY,
     TRIAL_EPOCHS,
-    load_architectures_by_index,
+    load_architectures_by_rows,
     plain_train_config_payload,
     run_plain_experiment,
 )
@@ -30,10 +30,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         )
     )
     parser.add_argument(
-        "--arch-indices",
+        "--arch-rows",
         type=int,
-        nargs="+",
-        default=[3358],
+        nargs="*",
+        default=[0],
+        help=(
+            "Architecture row numbers. The default is 0; passing the option "
+            "without values selects all architectures."
+        ),
     )
     parser.add_argument("--lr", type=float, default=INITIAL_LR)
     parser.add_argument(
@@ -106,10 +110,6 @@ def resolve_device(requested: str) -> torch.device:
 
 
 def validate_args(args: argparse.Namespace) -> None:
-    if not args.arch_indices:
-        raise ValueError("--arch-indices must contain at least one value")
-    if len(set(args.arch_indices)) != len(args.arch_indices):
-        raise ValueError("--arch-indices values must be unique")
     if args.lr <= 0:
         raise ValueError("--lr must be positive")
     if args.weight_decay < 0:
@@ -129,9 +129,9 @@ def main(argv: Sequence[str] | None = None) -> None:
         datefmt="%Y-%m-%d %H:%M:%S",
     )
     architecture_path = project_path(args.architectures_path)
-    architectures = load_architectures_by_index(
+    architectures = load_architectures_by_rows(
         architecture_path,
-        tuple(args.arch_indices),
+        tuple(args.arch_rows) if args.arch_rows else None,
     )
     device = resolve_device(args.device)
     output_dir = project_path(args.output_dir)

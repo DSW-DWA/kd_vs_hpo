@@ -51,32 +51,31 @@ def plain_train_config_payload(config: TrainConfig) -> dict[str, Any]:
     }
 
 
-def load_architectures_by_index(
+def load_architectures_by_rows(
     path: Path,
-    arch_indices: tuple[int, ...],
+    rows: tuple[int, ...] | None,
 ) -> tuple[dict[str, Any], ...]:
-    if not arch_indices:
-        raise ValueError("At least one architecture index is required")
-    if len(set(arch_indices)) != len(arch_indices):
-        raise ValueError("Architecture indices must be unique")
-
     with path.open("r", encoding="utf-8") as file:
         records = json.load(file)
-    by_index: dict[int, dict[str, Any]] = {}
-    for row, record in enumerate(records):
-        arch_index = int(record["arch_index"])
-        if arch_index in by_index:
-            raise ValueError(f"Architecture index {arch_index} is not unique in {path}")
-        by_index[arch_index] = {
+    selected = tuple(
+        {
             **record,
             "arch_row": row,
-            "arch_index": arch_index,
+            "arch_index": int(record["arch_index"]),
         }
+        for row, record in enumerate(records)
+        if rows is None or row in rows
+    )
+    if not selected:
+        raise ValueError("No architectures selected")
 
-    missing = [index for index in arch_indices if index not in by_index]
-    if missing:
-        raise ValueError(f"Architecture indices were not found in {path}: {missing}")
-    return tuple(by_index[index] for index in arch_indices)
+    arch_indices = [architecture["arch_index"] for architecture in selected]
+    duplicate_indices = sorted(
+        index for index in set(arch_indices) if arch_indices.count(index) > 1
+    )
+    if duplicate_indices:
+        raise ValueError(f"Architecture indices must be unique: {duplicate_indices}")
+    return selected
 
 
 def run_plain_experiment(
