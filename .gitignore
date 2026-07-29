@@ -12,4 +12,6 @@ wheels/
 # Experiment outputs
 data/
 runs/
-hpo_output/
+
+/hpo_output/
+.DS_Store

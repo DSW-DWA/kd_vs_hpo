@@ -1,0 +1,57 @@
+{
+  "experiment": "plain_training",
+  "device": "cpu",
+  "architectures": [
+    {
+      "name": "infer.tiny",
+      "C": 16,
+      "N": 5,
+      "arch_str": "|nor_conv_1x1~0|+|nor_conv_1x1~0|avg_pool_3x3~1|+|nor_conv_1x1~0|skip_connect~1|avg_pool_3x3~2|",
+      "num_classes": 10,
+      "arch_index": 3358,
+      "search_space": "tss",
+      "dataset": "cifar10-valid",
+      "arch_row": 1
+    }
+  ],
+  "trials": [
+    {
+      "trial_id": 0,
+      "target_epochs": 100,
+      "trial_seed": 42
+    },
+    {
+      "trial_id": 1,
+      "target_epochs": 200,
+      "trial_seed": 43
+    }
+  ],
+  "train": {
+    "batch_size": 256,
+    "num_workers": 6,
+    "validation_fraction": 0.1,
+    "momentum": 0.9,
+    "grad_clip_norm": 5.0,
+    "seed": 42,
+    "deterministic": false,
+    "amp": true,
+    "data_root": "/Users/andreich/Projects/kd_vs_hpo/data",
+    "checkpoint_dir": "/Users/andreich/Projects/kd_vs_hpo/plain_training_output/arch_3358_seed42_run01/checkpoints",
+    "log_dir": "/Users/andreich/Projects/kd_vs_hpo/plain_training_output/arch_3358_seed42_run01/runs"
+  },
+  "optimizer": {
+    "name": "SGD",
+    "initial_lr": 0.05,
+    "weight_decay": 0.0005,
+    "momentum": 0.9
+  },
+  "scheduler": {
+    "name": "CosineAnnealingLR",
+    "T_max": "target_epochs of each independent trial",
+    "eta_min": 0.0
+  },
+  "loss": "CrossEntropyLoss",
+  "uses_distillation": false,
+  "uses_optuna": false,
+  "uses_pruning": false
+}
