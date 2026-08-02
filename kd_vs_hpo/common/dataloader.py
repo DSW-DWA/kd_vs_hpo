@@ -1,9 +1,12 @@
 from pathlib import Path
 
 import torch
+import torchvision.datasets as datasets
 import torchvision.transforms as T
 from torch.utils.data import DataLoader, Subset
-from torchvision import datasets
+
+from kd_vs_hpo.common.config import TrainConfig
+
 
 normalize_kwargs = {
     "mean": [0.49139968, 0.48215841, 0.44653091],
