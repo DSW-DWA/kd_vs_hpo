@@ -12,7 +12,11 @@ wheels/
 # Experiment outputs
 data/
 runs/
+hpo_output/
+checkpoints/
+logs/
+multirun/
+outputs/
 
-/hpo_output/
 .DS_Store
 plain_training_output/

@@ -1,4 +1,4 @@
-from typing import Any
+from pathlib import Path
 
 import torch
 import torchvision.datasets as datasets
@@ -34,30 +34,24 @@ def build_cifar10_datasets(
     cfg: TrainConfig,
 ) -> tuple[Dataset[Any], Dataset[Any], Dataset[Any]]:
     train_aug_dataset = datasets.CIFAR10(
-        root=cfg.data_root,
-        train=True,
-        download=True,
-        transform=train_transform,
+        root=data_root, train=True, download=True, transform=train_transform
     )
     train_eval_dataset = datasets.CIFAR10(
-        root=cfg.data_root,
-        train=True,
-        download=True,
-        transform=eval_transform,
+        root=data_root, train=True, download=True, transform=eval_transform
     )
     test_dataset = datasets.CIFAR10(
-        root=cfg.data_root,
-        train=False,
-        download=True,
-        transform=eval_transform,
+        root=data_root, train=False, download=True, transform=eval_transform
     )
 
-    split_gen = torch.Generator().manual_seed(cfg.seed)
+    split_gen = torch.Generator().manual_seed(seed)
     indices = torch.randperm(len(train_aug_dataset), generator=split_gen).tolist()
 
-    n_val = int(round(len(indices) * cfg.validation_fraction))
+    n_val = int(round(len(indices) * validation_fraction))
     val_indices = indices[:n_val]
     train_indices = indices[n_val:]
+
+    pin_memory = device.type == "cuda"
+    persistent_workers = num_workers > 0
 
     return (
         Subset(train_aug_dataset, train_indices),
@@ -80,7 +74,7 @@ def build_dataloader(
         "pin_memory": device.type == "cuda",
         "persistent_workers": cfg.num_workers > 0,
     }
-    if cfg.num_workers > 0:
+    if num_workers > 0:
         loader_kwargs["prefetch_factor"] = 2
 
     return DataLoader(
