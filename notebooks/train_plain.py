@@ -8,7 +8,7 @@ from typing import Sequence
 
 import torch
 
-from src.common import TrainConfig
+from src.common.config import TrainConfig
 from src.plain_training import (
     INITIAL_LR,
     INITIAL_WEIGHT_DECAY,

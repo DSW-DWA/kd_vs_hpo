@@ -4,16 +4,16 @@ from pathlib import Path
 
 import torch
 
-from src.common import TrainConfig
-from src.hpo import (
+from src.common.config import TrainConfig
+from src.hpo.config import (
     DEFAULT_PRUNERS,
     HPOExperimentConfig,
     OptunaConfig,
     PRUNER_NAMES,
     SAMPLER_NAMES,
     SearchSpace,
-    run_hpo_experiment,
 )
+from src.hpo.pipeline import run_hpo_experiment
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
