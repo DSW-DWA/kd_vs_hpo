@@ -17,3 +17,6 @@ checkpoints/
 logs/
 multirun/
 outputs/
+
+.DS_Store
+plain_training_output/
