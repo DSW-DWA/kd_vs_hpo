@@ -1,0 +1,38 @@
+max_epochs: 200
+batch_size: 256
+num_workers: 2
+validation_fraction: 0.1
+
+grad_clip_norm: 5.0
+
+seed: 42
+deterministic: true
+amp: true
+
+train_step_multiplier: 3.0
+
+data_root: data
+checkpoint_dir: checkpoints/test_run
+log_dir: logs/test_run
+
+flops_counter_mode: SILENT
+run_name: ""
+
+flops_budget: 1.0e20
+
+# optimizer DEFAULT_SCHEDULER_CLS
+optimizer_params:
+  lr: 0.1
+  momentum: 0.9
+  weight_decay: 5e-4
+
+# scheduler DEFAULT_SCHEDULER_CLS
+scheduler_params:
+  T_max: ${max_epochs}
+
+teachers_mapping: null
+kd_loss: null
+
+student: null
+
+architectures_path: experiments/nats_architectures_10.json

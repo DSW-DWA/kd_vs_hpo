@@ -13,3 +13,7 @@ wheels/
 data/
 runs/
 hpo_output/
+checkpoints/
+logs/
+multirun/
+outputs/

@@ -1,16 +1,18 @@
 from dataclasses import dataclass
+from enum import StrEnum
 
 import torch
-import torch.nn as nn
 from calflops import calculate_flops
+from torch import nn
 
 
-def count_flops_params(
-    model: nn.Module,
-    input_shape: tuple[int, ...] = (1, 3, 32, 32),
-    device: str = "cuda",
-) -> tuple[int, int]:
-    model = model.to(device).eval()
+class CounterMode(StrEnum):
+    SILENT = "silent"
+    OFF = "off"
+    ON = "on"
+
+@torch.inference_mode()
+def count_flops_params(model: nn.Module, input_shape=(1, 3, 32, 32)):
     flops, _, params = calculate_flops(
         model=model,
         input_shape=input_shape,
@@ -23,6 +25,7 @@ def count_flops_params(
 @dataclass
 class FlopsBudgetTracker:
     budget: int
+    mode: CounterMode
     spent: int = 0
 
     def remaining(self) -> int:
@@ -32,7 +35,11 @@ class FlopsBudgetTracker:
         return self.spent + int(flops) <= self.budget
 
     def spend(self, flops: int) -> None:
-        self.spent += int(flops)
+        if self.mode != CounterMode.OFF:
+            self.spent += int(flops)
+
+    def reset(self):
+        self.spent = 0
 
 
 def estimate_batch_flops(
