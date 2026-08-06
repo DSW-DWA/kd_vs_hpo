@@ -1,56 +1,47 @@
-# HPO experiments
-
-Optuna HPO experiments for NATS-Bench architectures on CIFAR-10.
-
-## Installation
-
-Python 3.11 and [uv](https://docs.astral.sh/uv/) are required.
+# Setup
 
 ```shell
 make install
 source .venv/bin/activate
 ```
 
-Run all commands from the project root.
-
-## Running HPO
+# HPO
 
 ```shell
-python notebooks/hpo_optuna.py [arguments]
+python -u -m notebooks.hpo_optuna [OPTIONS]
 ```
 
-Each architecture, sampler, and pruner combination runs as a separate Optuna
-study.
+| Option | Description | Default |
+| --- | --- | --- |
+| `--arch-rows ROW...` | Architecture rows | `0` |
+| `--n-trials N` | Trials per study | `20` |
+| `--max-epochs N` | Epochs per trial | `200` |
+| `--samplers NAME...` | `tpe`, `grid`, `cmaes`, `gp` | all |
+| `--pruners NAME...` | `none`, `successive_halving`, `hyperband` | `successive_halving hyperband` |
+| `--device DEVICE` | `auto`, `cpu`, `cuda`, `mps` | `auto` |
+| `--processes N` | Parallel studies | `1` |
+| `--gpu-ids ID...` | CUDA device IDs | all |
+| `--output-dir PATH` | Output directory | `hpo_output` |
 
-- `--arch-rows ROW [ROW ...]` — architecture row numbers. The default is `0`;
-  passing the flag without values selects all architectures.
-- `--n-trials N` — maximum number of trials per study. The default is `20`.
-  The default GridSampler search space requires at least `9`.
-- `--max-epochs N` — maximum number of training epochs per trial. The default
-  is `200`. Successive Halving and Hyperband require at least `10`.
-- `--output-dir PATH` — output directory. The default is `hpo_output`.
-- `--samplers NAME [NAME ...]` — samplers to run. Accepted values are `tpe`,
-  `grid`, `cmaes`, and `gp`; all four are enabled by default.
-- `--pruners NAME [NAME ...]` — pruners to run. Accepted values are `none`,
-  `successive_halving`, and `hyperband`; `successive_halving` and `hyperband`
-  are enabled by default.
-- `--device DEVICE` — compute device. Accepted values are `auto`, `cpu`,
-  `cuda`, and `mps`; the default is `auto`. Automatic selection prefers CUDA,
-  then MPS, then CPU.
-- `--processes N` — number of studies to run in parallel. The default is `1`.
-- `--gpu-ids ID [ID ...]` — CUDA device IDs used by worker processes. When
-  omitted, all available CUDA devices are used.
-- `-h`, `--help` — show the CLI help message and exit.
-
-Show all available arguments:
+# Plain training
 
 ```shell
-python notebooks/hpo_optuna.py --help
+python -u -m notebooks.train_plain [OPTIONS]
 ```
 
-## Results
-
-CSV tables are written to `hpo_output/tables`, checkpoints to
-`hpo_output/checkpoints`, and the resolved run configuration to
-`hpo_output/run_config.json`. Interrupted trial data remains in
-`hpo_output/recovery` until the next run.
+| Option | Description | Default |
+| --- | --- | --- |
+| `--arch-rows ROW...` | Architecture rows | `0` |
+| `--lr VALUE` | Initial learning rate | `0.05` |
+| `--weight-decay VALUE` | Weight decay | `0.0005` |
+| `--device DEVICE` | `auto`, `cpu`, `cuda`, `mps` | `auto` |
+| `--seed N` | Random seed | `42` |
+| `--batch-size N` | Batch size | `256` |
+| `--num-workers N` | Data workers | `6` |
+| `--[no-]deterministic` | Deterministic mode | disabled |
+| `--[no-]amp` | Mixed precision | enabled |
+| `--[no-]verbose` | Epoch progress | disabled |
+| `--data-root PATH` | Dataset directory | `data` |
+| `--architectures-path PATH` | Architecture file | `experiments/nats_architectures_10.json` |
+| `--output-dir PATH` | Output directory | `plain_training_output` |
+| `--dry-run` | Print configuration | disabled |
