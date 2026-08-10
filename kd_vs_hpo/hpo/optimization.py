@@ -6,7 +6,7 @@ from typing import Any
 
 import optuna
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import DataLoader
 
 from kd_vs_hpo.common.flops import CounterMode, FlopsBudgetTracker
 from kd_vs_hpo.common.nats import create_nats_model
@@ -17,7 +17,6 @@ from kd_vs_hpo.hpo.config import (
     SAMPLER_NAMES,
     SamplerName,
 )
-from kd_vs_hpo.hpo.data import build_dataloader
 from kd_vs_hpo.hpo.persistence import save_study_progress
 from kd_vs_hpo.hpo.training import build_lightning_module, fit_lightning_trial
 
@@ -30,8 +29,8 @@ def run_study(
     sampler_name: SamplerName,
     pruner_name: PrunerName,
     experiment: HPOExperimentConfig,
-    train_dataset: Dataset[Any],
-    val_dataset: Dataset[Any],
+    train_loader: DataLoader,
+    val_loader: DataLoader,
     device: torch.device,
     forward_flops_per_sample: int,
     n_train: int,
@@ -78,20 +77,8 @@ def run_study(
         trial_seed = trial_seed_base * 10_000 + trial.number
         trial_started = time.perf_counter()
         set_seed(trial_seed, deterministic=experiment.train.deterministic)
-        train_loader = build_dataloader(
-            train_dataset,
-            experiment.train,
-            device,
-            shuffle=True,
-            seed=trial_seed,
-        )
-        val_loader = build_dataloader(
-            val_dataset,
-            experiment.train,
-            device,
-            shuffle=False,
-            seed=trial_seed + 1,
-        )
+        if train_loader.generator is not None:
+            train_loader.generator.manual_seed(trial_seed)
         model = create_nats_model(architecture)
         checkpoint = _checkpoint_path(experiment.output_dir, study_name, trial.number)
         flops_tracker = FlopsBudgetTracker(
@@ -227,7 +214,7 @@ def run_study(
                         RuntimeWarning,
                         stacklevel=2,
                     )
-            del train_loader, val_loader, lightning_module, model
+            del lightning_module, model
             gc.collect()
             if device.type == "cuda":
                 torch.cuda.empty_cache()

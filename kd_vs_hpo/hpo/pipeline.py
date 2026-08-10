@@ -8,10 +8,10 @@ from typing import Any
 
 import torch
 
+from kd_vs_hpo.common.dataloader import build_cifar10_dataloaders
 from kd_vs_hpo.common.flops import CounterMode, FlopsBudgetTracker, count_flops_params
 from kd_vs_hpo.common.nats import create_nats_model
 from kd_vs_hpo.hpo.config import HPOExperimentConfig, validate_experiment
-from kd_vs_hpo.hpo.data import build_cifar10_datasets, build_dataloader
 from kd_vs_hpo.hpo.persistence import save_result_tables, save_run_config
 from kd_vs_hpo.hpo.results import HPOExperimentResult, build_experiment_result
 from kd_vs_hpo.hpo.worker import (
@@ -37,24 +37,24 @@ def run_hpo_experiment(
     costs = _measure_architecture_costs(architectures)
     devices = resolve_worker_devices(experiment, device)
     evaluation_device = torch.device(devices[0])
-    train_dataset, val_dataset, test_dataset = build_cifar10_datasets(
-        experiment.train,
-        evaluation_device,
+    train_loader, val_loader, test_loader, n_train, n_val, n_test = (
+        build_cifar10_dataloaders(
+            experiment.train.checkpoint_dir,
+            experiment.train.log_dir,
+            experiment.train.data_root,
+            experiment.train.seed,
+            experiment.train.batch_size,
+            experiment.train.num_workers,
+            experiment.train.validation_fraction,
+            evaluation_device,
+        )
     )
-    test_loader = build_dataloader(
-        test_dataset,
-        experiment.train,
-        evaluation_device,
-        shuffle=False,
-        seed=experiment.train.seed + 2,
-    )
-    n_test = len(test_dataset)
     flops_tracker = FlopsBudgetTracker(
         budget=_maximum_experiment_flops(
             experiment,
             costs,
-            n_train=len(train_dataset),
-            n_val=len(val_dataset),
+            n_train=n_train,
+            n_val=n_val,
             n_test=n_test,
         ),
         mode=CounterMode.SILENT,
@@ -67,7 +67,6 @@ def run_hpo_experiment(
         "flops_tracker": _flops_tracker_payload(flops_tracker),
     }
     save_run_config(experiment.output_dir, run_config)
-    del train_dataset, val_dataset
 
     tasks = build_study_tasks(
         architectures,
@@ -76,7 +75,16 @@ def run_hpo_experiment(
         devices,
         recovery_dir,
     )
-    trial_records, epoch_records = run_study_tasks(tasks, devices)
+    local_loaders = (
+        (train_loader, val_loader, n_train, n_val) if len(devices) == 1 else None
+    )
+    if local_loaders is None:
+        del train_loader, val_loader
+    trial_records, epoch_records = run_study_tasks(
+        tasks,
+        devices,
+        local_loaders=local_loaders,
+    )
     for trial_record in trial_records:
         flops_tracker.spend(int(trial_record["total_flops"]))
     result = build_experiment_result(

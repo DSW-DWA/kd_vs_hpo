@@ -6,10 +6,16 @@ from pathlib import Path
 from typing import Any
 
 import torch
+from torch.utils.data import DataLoader
 
+from kd_vs_hpo.common.dataloader import build_cifar10_dataloaders
 from kd_vs_hpo.hpo.config import HPOExperimentConfig, PrunerName, SamplerName
-from kd_vs_hpo.hpo.data import build_cifar10_datasets
 from kd_vs_hpo.hpo.optimization import run_study
+
+
+WorkerLoaders = tuple[DataLoader, DataLoader, int, int]
+_worker_loaders: WorkerLoaders | None = None
+_worker_loaders_key: tuple[object, str] | None = None
 
 
 @dataclass(frozen=True)
@@ -29,6 +35,7 @@ class StudyTask:
 
 def run_study_process(
     task: StudyTask,
+    loaders: WorkerLoaders | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     device = torch.device(task.device)
     if device.type == "cuda":
@@ -36,8 +43,8 @@ def run_study_process(
     else:
         torch.set_num_threads(1)
 
-    train_dataset, val_dataset, _ = build_cifar10_datasets(
-        task.experiment.train,
+    train_loader, val_loader, n_train, n_val = loaders or _get_worker_loaders(
+        task.experiment,
         device,
     )
     return run_study(
@@ -45,14 +52,39 @@ def run_study_process(
         sampler_name=task.sampler,
         pruner_name=task.pruner,
         experiment=task.experiment,
-        train_dataset=train_dataset,
-        val_dataset=val_dataset,
+        train_loader=train_loader,
+        val_loader=val_loader,
         device=device,
         forward_flops_per_sample=task.forward_flops_per_sample,
-        n_train=len(train_dataset),
-        n_val=len(val_dataset),
+        n_train=n_train,
+        n_val=n_val,
         progress_dir=task.progress_dir,
     )
+
+
+def _get_worker_loaders(
+    experiment: HPOExperimentConfig,
+    device: torch.device,
+) -> WorkerLoaders:
+    global _worker_loaders, _worker_loaders_key
+    cache_key = experiment.train, str(device)
+    if _worker_loaders is None or _worker_loaders_key != cache_key:
+        config = experiment.train
+        train_loader, val_loader, _, n_train, n_val, _ = (
+            build_cifar10_dataloaders(
+                config.checkpoint_dir,
+                config.log_dir,
+                config.data_root,
+                config.seed,
+                config.batch_size,
+                config.num_workers,
+                config.validation_fraction,
+                device,
+            )
+        )
+        _worker_loaders = train_loader, val_loader, n_train, n_val
+        _worker_loaders_key = cache_key
+    return _worker_loaders
 
 
 def resolve_worker_devices(
@@ -122,13 +154,15 @@ def build_study_tasks(
 def run_study_tasks(
     tasks: list[StudyTask],
     worker_devices: tuple[str, ...],
+    *,
+    local_loaders: WorkerLoaders | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     trial_records: list[dict[str, Any]] = []
     epoch_records: list[dict[str, Any]] = []
 
     if len(worker_devices) == 1:
         for task in tasks:
-            trials, epochs = run_study_process(task)
+            trials, epochs = run_study_process(task, local_loaders)
             trial_records.extend(trials)
             epoch_records.extend(epochs)
         return trial_records, epoch_records
