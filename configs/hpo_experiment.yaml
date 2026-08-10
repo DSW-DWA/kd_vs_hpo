@@ -1,0 +1,55 @@
+device: auto
+
+architectures_path: experiments/nats_architectures_10.json
+output_dir: hpo_output
+arch_rows:
+  - 0
+num_processes: 1
+gpu_ids: null
+
+train:
+  batch_size: 256
+  num_workers: 2
+  validation_fraction: 0.1
+  momentum: 0.9
+  grad_clip_norm: 5.0
+  seed: 42
+  deterministic: false
+  amp: true
+  train_step_multiplier: 3.0
+  data_root: data
+  checkpoint_dir: ${output_dir}/checkpoints
+  log_dir: ${output_dir}/runs
+
+search_space:
+  lr:
+    - 4.5e-2
+    - 5.5e-2
+  weight_decay:
+    - 4.5e-4
+    - 5.5e-4
+  initial_lr: 5.0e-2
+  initial_weight_decay: 5.0e-4
+  grid_lr:
+    - 4.5e-2
+    - 5.0e-2
+    - 5.5e-2
+  grid_weight_decay:
+    - 4.5e-4
+    - 5.0e-4
+    - 5.5e-4
+
+optuna:
+  n_trials: 20
+  max_epochs: 200
+  samplers:
+    - tpe
+    - grid
+    - cmaes
+    - gp
+  pruners:
+    - successive_halving
+    - hyperband
+  startup_trials: 5
+  min_resource: 10
+  reduction_factor: 3
