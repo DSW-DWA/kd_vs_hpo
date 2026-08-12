@@ -108,59 +108,61 @@ def run_training_pipeline(
 
 @hydra.main(
     version_base=None,
-    config_path="../../configs",
+    config_path="../../conf",
+    config_name="config",
 )
 def main(cfg: DictConfig):
 
-    train_cfg = hydra.utils.instantiate(cfg)
-    seed_everything(train_cfg.seed)
+    general_cfg = cfg.general
+    kd_cfg = cfg.kd
+    seed_everything(general_cfg.seed)
 
-    data_root = Path(train_cfg.data_root)
-    checkpoint_dir = Path(train_cfg.checkpoint_dir)
-    log_dir = Path(train_cfg.log_dir)
+    data_root = Path(general_cfg.data_root)
+    checkpoint_dir = Path(kd_cfg.checkpoint_dir)
+    log_dir = Path(kd_cfg.log_dir)
 
     data_root.mkdir(parents=True, exist_ok=True)
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
     log_dir.mkdir(parents=True, exist_ok=True)
 
-    architectires = get_architectures_from_json(train_cfg.architectures_path)
-    model, student_arch = get_student_from_config(train_cfg, architectires)
+    architectires = get_architectures_from_json(general_cfg.architectures_path)
+    model, student_arch = get_student_from_config(kd_cfg, architectires)
 
-    teacher_ensemble, teacher_arches = get_teachers_from_config(train_cfg, architectires)
+    teacher_ensemble, teacher_arches = get_teachers_from_config(kd_cfg, architectires)
 
-    run_name = train_cfg.run_name + f"arch_{student_arch['arch_index']}_teachers_{'_'.join(str(t['arch_index']) for t in teacher_arches)}_seed_{train_cfg.seed}"
+    run_name = kd_cfg.run_name + f"arch_{student_arch['arch_index']}_teachers_{'_'.join(str(t['arch_index']) for t in teacher_arches)}_seed_{general_cfg.seed}"
 
     student_flops, _ = count_flops_params(model)
     teacher_flops = sum(
             count_flops_params(teacher)[0]
             for teacher in teacher_ensemble.teachers
         ) if teacher_ensemble is not None else 0
-    train_step_flops = int(student_flops * train_cfg.train_step_multiplier + teacher_flops)
+    train_step_flops = int(student_flops * general_cfg.train_step_multiplier + teacher_flops)
     eval_step_flops = 0
 
     run_training_pipeline(
         model=model,
         criterion=nn.CrossEntropyLoss(),
-        optimizer_kwargs=train_cfg.optimizer_params,
+        optimizer_kwargs=kd_cfg.optimizer_params,
         train_step_flops=train_step_flops,
         eval_step_flops=eval_step_flops,
         run_name=run_name,
         checkpoint_dir=checkpoint_dir,
         log_dir=log_dir,
         data_root=data_root,
-        max_epochs=train_cfg.max_epochs,
-        deterministic=train_cfg.deterministic,
-        amp=train_cfg.amp,
-        grad_clip_norm=train_cfg.grad_clip_norm,
-        seed=train_cfg.seed,
-        batch_size=train_cfg.batch_size,
-        num_workers=train_cfg.num_workers,
-        validation_fraction=train_cfg.validation_fraction,
+        max_epochs=general_cfg.max_epochs,
+        deterministic=general_cfg.deterministic,
+        amp=general_cfg.amp,
+        grad_clip_norm=general_cfg.grad_clip_norm,
+        seed=general_cfg.seed,
+        batch_size=general_cfg.batch_size,
+        num_workers=general_cfg.num_workers,
+        validation_fraction=general_cfg.validation_fraction,
         device=torch.device('cuda' if torch.cuda.is_available() else 'cpu'),
-        scheduler_kwargs=train_cfg.scheduler_params,
+        scheduler_kwargs=kd_cfg.scheduler_params,
         teacher_ensemble=teacher_ensemble,
-        kd_loss=train_cfg.kd_loss,
-        flops_tracker=FlopsBudgetTracker(train_cfg.flops_budget, train_cfg.flops_counter_mode),
+        kd_loss=kd_cfg.kd_loss,
+        flops_tracker=FlopsBudgetTracker(kd_cfg.flops_budget, kd_cfg.flops_counter_mode),
         num_classes=10,
     )
 

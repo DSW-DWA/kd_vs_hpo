@@ -3,10 +3,9 @@ from __future__ import annotations
 import logging
 import sys
 from pathlib import Path
-from typing import Any
 
 import hydra
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, ListConfig
 
 from kd_vs_hpo.common.config import TrainConfig
 from kd_vs_hpo.hpo.config import (
@@ -27,93 +26,84 @@ def project_path(path: str | Path) -> Path:
 
 
 def build_experiment(cfg: DictConfig) -> HPOExperimentConfig:
-    values = OmegaConf.to_container(cfg, resolve=True)
-    if not isinstance(values, dict):
-        raise TypeError("HPO configuration must be a mapping")
-    train_values = _mapping(values, "train")
-    search_values = _mapping(values, "search_space")
-    optuna_values = _mapping(values, "optuna")
+    general_cfg = cfg.general
+    hpo_cfg = cfg.hpo
 
     experiment = HPOExperimentConfig(
         train=TrainConfig(
-            batch_size=int(train_values["batch_size"]),
-            num_workers=int(train_values["num_workers"]),
-            validation_fraction=float(train_values["validation_fraction"]),
-            momentum=float(train_values["momentum"]),
+            batch_size=int(general_cfg.batch_size),
+            num_workers=int(general_cfg.num_workers),
+            validation_fraction=float(general_cfg.validation_fraction),
+            momentum=float(general_cfg.momentum),
             grad_clip_norm=(
                 None
-                if train_values["grad_clip_norm"] is None
-                else float(train_values["grad_clip_norm"])
+                if general_cfg.grad_clip_norm is None
+                else float(general_cfg.grad_clip_norm)
             ),
-            seed=int(train_values["seed"]),
-            deterministic=bool(train_values["deterministic"]),
-            amp=bool(train_values["amp"]),
-            train_step_multiplier=float(train_values["train_step_multiplier"]),
-            data_root=project_path(str(train_values["data_root"])),
-            checkpoint_dir=project_path(str(train_values["checkpoint_dir"])),
-            log_dir=project_path(str(train_values["log_dir"])),
+            seed=int(general_cfg.seed),
+            deterministic=bool(general_cfg.deterministic),
+            amp=bool(general_cfg.amp),
+            train_step_multiplier=float(general_cfg.train_step_multiplier),
+            data_root=project_path(str(general_cfg.data_root)),
+            checkpoint_dir=project_path(str(hpo_cfg.checkpoint_dir)),
+            log_dir=project_path(str(hpo_cfg.log_dir)),
         ),
         search_space=SearchSpace(
-            lr=_float_pair(search_values, "lr"),
-            weight_decay=_float_pair(search_values, "weight_decay"),
-            initial_lr=float(search_values["initial_lr"]),
-            initial_weight_decay=float(search_values["initial_weight_decay"]),
-            grid_lr=tuple(float(value) for value in search_values["grid_lr"]),
+            lr=_float_pair(hpo_cfg.search_space.lr, "lr"),
+            weight_decay=_float_pair(
+                hpo_cfg.search_space.weight_decay,
+                "weight_decay",
+            ),
+            initial_lr=float(hpo_cfg.search_space.initial_lr),
+            initial_weight_decay=float(hpo_cfg.search_space.initial_weight_decay),
+            grid_lr=tuple(float(value) for value in hpo_cfg.search_space.grid_lr),
             grid_weight_decay=tuple(
-                float(value) for value in search_values["grid_weight_decay"]
+                float(value) for value in hpo_cfg.search_space.grid_weight_decay
             ),
         ),
         optuna=OptunaConfig(
-            n_trials=int(optuna_values["n_trials"]),
-            max_epochs=int(optuna_values["max_epochs"]),
-            samplers=tuple(optuna_values["samplers"]),
-            pruners=tuple(optuna_values["pruners"]),
-            startup_trials=int(optuna_values["startup_trials"]),
-            min_resource=int(optuna_values["min_resource"]),
-            reduction_factor=int(optuna_values["reduction_factor"]),
+            n_trials=int(hpo_cfg.optuna.n_trials),
+            max_epochs=int(hpo_cfg.optuna.max_epochs),
+            samplers=tuple(hpo_cfg.optuna.samplers),
+            pruners=tuple(hpo_cfg.optuna.pruners),
+            startup_trials=int(hpo_cfg.optuna.startup_trials),
+            min_resource=int(hpo_cfg.optuna.min_resource),
+            reduction_factor=int(hpo_cfg.optuna.reduction_factor),
         ),
-        architectures_path=project_path(str(values["architectures_path"])),
-        output_dir=project_path(str(values["output_dir"])),
+        architectures_path=project_path(str(general_cfg.architectures_path)),
+        output_dir=project_path(str(hpo_cfg.output_dir)),
         arch_rows=(
             None
-            if values["arch_rows"] is None
-            else tuple(int(value) for value in values["arch_rows"])
+            if hpo_cfg.arch_rows is None
+            else tuple(int(value) for value in hpo_cfg.arch_rows)
         ),
-        num_processes=int(values["num_processes"]),
+        num_processes=int(hpo_cfg.num_processes),
         gpu_ids=(
             None
-            if values["gpu_ids"] is None
-            else tuple(int(value) for value in values["gpu_ids"])
+            if hpo_cfg.gpu_ids is None
+            else tuple(int(value) for value in hpo_cfg.gpu_ids)
         ),
-        device=str(values["device"]),
+        device=str(hpo_cfg.device),
     )
     validate_experiment(experiment)
     return experiment
 
 
-def _mapping(values: dict[str, Any], key: str) -> dict[str, Any]:
-    result = values[key]
-    if not isinstance(result, dict):
-        raise TypeError(f"{key} must be a mapping")
-    return result
-
-
-def _float_pair(values: dict[str, Any], key: str) -> tuple[float, float]:
-    pair = values[key]
-    if not isinstance(pair, list) or len(pair) != 2:
-        raise ValueError(f"{key} must contain exactly two values")
+def _float_pair(pair: ListConfig, name: str) -> tuple[float, float]:
+    if not isinstance(pair, ListConfig) or len(pair) != 2:
+        raise ValueError(f"{name} must contain exactly two values")
     return float(pair[0]), float(pair[1])
 
 
 @hydra.main(
     version_base=None,
-    config_path="../configs",
-    config_name="hpo_experiment",
+    config_path="../conf",
+    config_name="config",
 )
 def main(cfg: DictConfig) -> None:
     if len(sys.argv) != 1:
         raise ValueError(
-            "hpo_optuna.py takes parameters only from configs/hpo_experiment.yaml; "
+            "hpo_optuna.py takes parameters only from conf/config.yaml; "
             "command-line arguments are not allowed"
         )
     logging.basicConfig(

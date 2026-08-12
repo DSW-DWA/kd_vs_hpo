@@ -1,25 +1,12 @@
 device: auto
 
-architectures_path: experiments/nats_architectures_10.json
 output_dir: hpo_output
+checkpoint_dir: ${hpo.output_dir}/checkpoints
+log_dir: ${hpo.output_dir}/runs
 arch_rows:
   - 0
 num_processes: 1
 gpu_ids: null
-
-train:
-  batch_size: 256
-  num_workers: 2
-  validation_fraction: 0.1
-  momentum: 0.9
-  grad_clip_norm: 5.0
-  seed: 42
-  deterministic: false
-  amp: true
-  train_step_multiplier: 3.0
-  data_root: data
-  checkpoint_dir: ${output_dir}/checkpoints
-  log_dir: ${output_dir}/runs
 
 search_space:
   lr:

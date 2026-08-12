@@ -59,52 +59,55 @@ def trial_epochs(max_epochs: int) -> tuple[int, int]:
 
 @hydra.main(
     version_base=None,
-    config_path="../configs",
-    config_name="base_models",
+    config_path="../conf",
+    config_name="config",
 )
 def main(cfg: DictConfig) -> None:
     if len(sys.argv) != 1:
         raise ValueError(
-            "train_plain.py takes parameters only from configs/base_models.yaml; "
+            "train_plain.py takes parameters only from conf/config.yaml; "
             "command-line arguments are not allowed"
         )
-    cfg = hydra.utils.instantiate(cfg)
+    general_cfg = cfg.general
+    kd_cfg = cfg.kd
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s | %(levelname)s | %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
-    architectures_path = project_path(cfg.architectures_path)
+    architectures_path = project_path(general_cfg.architectures_path)
     architectures = select_student(
         load_architectures_by_rows(architectures_path, None),
-        cfg.student,
+        kd_cfg.student,
     )
     device = resolve_device("auto")
-    checkpoint_dir = project_path(cfg.checkpoint_dir)
-    log_dir = project_path(cfg.log_dir)
+    checkpoint_dir = project_path(kd_cfg.checkpoint_dir)
+    log_dir = project_path(kd_cfg.log_dir)
     output_dir = checkpoint_dir
-    epochs = trial_epochs(int(cfg.max_epochs))
+    epochs = trial_epochs(int(general_cfg.max_epochs))
     train_config = TrainConfig(
-        batch_size=int(cfg.batch_size),
-        num_workers=int(cfg.num_workers),
-        validation_fraction=float(cfg.validation_fraction),
-        momentum=float(cfg.optimizer_params.momentum),
+        batch_size=int(general_cfg.batch_size),
+        num_workers=int(general_cfg.num_workers),
+        validation_fraction=float(general_cfg.validation_fraction),
+        momentum=float(general_cfg.momentum),
         grad_clip_norm=(
-            None if cfg.grad_clip_norm is None else float(cfg.grad_clip_norm)
+            None
+            if general_cfg.grad_clip_norm is None
+            else float(general_cfg.grad_clip_norm)
         ),
-        seed=int(cfg.seed),
-        deterministic=bool(cfg.deterministic),
-        amp=bool(cfg.amp),
-        train_step_multiplier=float(cfg.train_step_multiplier),
-        data_root=project_path(cfg.data_root),
+        seed=int(general_cfg.seed),
+        deterministic=bool(general_cfg.deterministic),
+        amp=bool(general_cfg.amp),
+        train_step_multiplier=float(general_cfg.train_step_multiplier),
+        data_root=project_path(general_cfg.data_root),
         checkpoint_dir=checkpoint_dir,
         log_dir=log_dir,
     )
     result = run_plain_experiment(
         architectures=architectures,
-        initial_lr=float(cfg.optimizer_params.lr),
-        weight_decay=float(cfg.optimizer_params.weight_decay),
+        initial_lr=float(kd_cfg.optimizer_params.lr),
+        weight_decay=float(kd_cfg.optimizer_params.weight_decay),
         train_config=train_config,
         device=device,
         output_dir=output_dir,

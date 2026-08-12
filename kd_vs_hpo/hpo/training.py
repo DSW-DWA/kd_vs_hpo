@@ -14,6 +14,10 @@ from torch.utils.data import DataLoader
 
 from kd_vs_hpo.common.config import TrainConfig
 from kd_vs_hpo.common.flops import FlopsBudgetTracker
+from kd_vs_hpo.common.train_pipeline import (
+    DEFAULT_OPTIMIZER_CLS,
+    DEFAULT_SCHEDULER_CLS,
+)
 from kd_vs_hpo.common.train_modules import KDLightningModule, build_trainer
 
 
@@ -120,18 +124,24 @@ def build_lightning_module(
     max_epochs: int,
     forward_flops_per_sample: int,
     flops_tracker: FlopsBudgetTracker | None,
+    optimizer_cls: type[torch.optim.Optimizer] = DEFAULT_OPTIMIZER_CLS,
+    scheduler_cls: type[torch.optim.lr_scheduler.LRScheduler] | None = (
+        DEFAULT_SCHEDULER_CLS
+    ),
 ) -> KDLightningModule:
     module = KDLightningModule(
         model=model,
         criterion=nn.CrossEntropyLoss(),
-        optimizer_cls=torch.optim.SGD,
+        optimizer_cls=optimizer_cls,
         optimizer_kwargs={
             "lr": lr,
             "momentum": train_config.momentum,
             "weight_decay": weight_decay,
         },
-        scheduler_cls=torch.optim.lr_scheduler.CosineAnnealingLR,
-        scheduler_kwargs={"T_max": max(1, max_epochs)},
+        scheduler_cls=scheduler_cls,
+        scheduler_kwargs=(
+            None if scheduler_cls is None else {"T_max": max(1, max_epochs)}
+        ),
         train_step_flops=int(
             forward_flops_per_sample * train_config.train_step_multiplier
         ),
