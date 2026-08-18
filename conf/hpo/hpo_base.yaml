@@ -1,0 +1,42 @@
+device: auto
+
+output_dir: hpo_output
+checkpoint_dir: ${hpo.output_dir}/checkpoints
+log_dir: ${hpo.output_dir}/runs
+arch_rows:
+  - 0
+num_processes: 1
+gpu_ids: null
+
+search_space:
+  lr:
+    - 4.5e-2
+    - 5.5e-2
+  weight_decay:
+    - 4.5e-4
+    - 5.5e-4
+  initial_lr: 5.0e-2
+  initial_weight_decay: 5.0e-4
+  grid_lr:
+    - 4.5e-2
+    - 5.0e-2
+    - 5.5e-2
+  grid_weight_decay:
+    - 4.5e-4
+    - 5.0e-4
+    - 5.5e-4
+
+optuna:
+  n_trials: 20
+  max_epochs: 200
+  samplers:
+    - tpe
+    - grid
+    - cmaes
+    - gp
+  pruners:
+    - successive_halving
+    - hyperband
+  startup_trials: 5
+  min_resource: 10
+  reduction_factor: 3
