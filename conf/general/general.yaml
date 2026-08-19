@@ -9,4 +9,4 @@ deterministic: true
 amp: true
 train_step_multiplier: 3.0
 data_root: data
-architectures_path: experiments/nats_architectures_10.json
+architectures_path: experiments/nats_architectures_7.json

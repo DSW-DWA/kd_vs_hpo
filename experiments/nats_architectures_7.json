@@ -13,26 +13,6 @@
         "name": "infer.tiny",
         "C": 16,
         "N": 5,
-        "arch_str": "|nor_conv_1x1~0|+|nor_conv_1x1~0|avg_pool_3x3~1|+|nor_conv_1x1~0|skip_connect~1|avg_pool_3x3~2|",
-        "num_classes": 10,
-        "arch_index": 3358,
-        "search_space": "tss", 
-        "dataset": "cifar10-valid"
-    },
-    {
-        "name": "infer.tiny",
-        "C": 16,
-        "N": 5,
-        "arch_str": "|avg_pool_3x3~0|+|avg_pool_3x3~0|avg_pool_3x3~1|+|nor_conv_1x1~0|nor_conv_1x1~1|nor_conv_3x3~2|",
-        "num_classes": 10,
-        "arch_index": 11898,
-        "search_space": "tss", 
-        "dataset": "cifar10-valid"
-    },
-    {
-        "name": "infer.tiny",
-        "C": 16,
-        "N": 5,
         "arch_str": "|nor_conv_1x1~0|+|skip_connect~0|none~1|+|nor_conv_3x3~0|none~1|skip_connect~2|",
         "num_classes": 10,
         "arch_index": 11570,
@@ -63,40 +43,30 @@
         "name": "infer.tiny",
         "C": 16,
         "N": 5,
-        "arch_str": "|none~0|+|avg_pool_3x3~0|avg_pool_3x3~1|+|avg_pool_3x3~0|nor_conv_3x3~1|avg_pool_3x3~2|",
-        "num_classes": 10,
-        "arch_index": 1676,
-        "search_space": "tss", 
-        "dataset": "cifar10-valid"
-    },
-    {
-        "name": "infer.tiny",
-        "C": 16,
-        "N": 5,
-        "arch_str": "|none~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|nor_conv_1x1~0|nor_conv_3x3~1|avg_pool_3x3~2|",
-        "num_classes": 10,
-        "arch_index": 5750,
-        "search_space": "tss", 
-        "dataset": "cifar10-valid"
-    },
-    {
-        "name": "infer.tiny",
-        "C": 16,
-        "N": 5,
-        "arch_str": "|nor_conv_1x1~0|+|skip_connect~0|avg_pool_3x3~1|+|none~0|nor_conv_3x3~1|nor_conv_3x3~2|",
-        "num_classes": 10,
-        "arch_index": 2514,
-        "search_space": "tss", 
-        "dataset": "cifar10-valid"
-    },
-    {
-        "name": "infer.tiny",
-        "C": 16,
-        "N": 5,
         "arch_str": "|avg_pool_3x3~0|+|nor_conv_1x1~0|avg_pool_3x3~1|+|skip_connect~0|nor_conv_3x3~1|none~2|",
         "num_classes": 10,
         "arch_index": 7153,
         "search_space": "tss", 
         "dataset": "cifar10-valid"
+    },
+    {
+        "name": "infer.tiny",
+        "C": 16,
+        "N": 5,
+        "arch_str": "|nor_conv_1x1~0|+|nor_conv_3x3~0|nor_conv_3x3~1|+|avg_pool_3x3~0|none~1|nor_conv_3x3~2|",
+        "num_classes": 10,
+        "arch_index": 6765,
+        "search_space": "tss",
+        "dataset": "cifar10"
+    },
+    {
+        "name": "infer.tiny",
+        "C": 16,
+        "N": 5,
+        "arch_str": "|nor_conv_1x1~0|+|none~0|skip_connect~1|+|avg_pool_3x3~0|none~1|none~2|",
+        "num_classes": 10,
+        "arch_index": 1342,
+        "search_space": "tss",
+        "dataset": "cifar10"
     }
 ]
