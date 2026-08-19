@@ -6,6 +6,7 @@ from typing import Any
 import numpy as np
 import torch
 from xautodl.models import get_cell_based_tiny_net
+from datetime import datetime
 
 
 def set_seed(seed: int, deterministic: bool = True) -> None:
@@ -65,3 +66,13 @@ def get_architectures_from_json(arch_file: str):
     with open(arch_file, 'r') as f:
         architectures = json.load(f)
     return architectures
+
+def get_datetime():
+    time = datetime.now()
+    return time.strftime("%Y-%m-%d-%H-%M-%S")
+
+def resolve_dir(path: str):
+    _path = Path(path)
+    if _path.exists():
+        return str(_path.parent / (_path.name + '_' + get_datetime()))
+    return path

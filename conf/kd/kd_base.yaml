@@ -1,5 +1,5 @@
-checkpoint_dir: checkpoints/test_run
-log_dir: logs/test_run
+checkpoint_dir: checkpoints/base200_3_archs
+log_dir: logs/base200_3_archs
 
 flops_counter_mode: SILENT
 flops_budget: 1.0e20

@@ -16,6 +16,7 @@ from kd_vs_hpo.common.metrics import (
 )
 from kd_vs_hpo.common.utils import (
     extract_logits,
+    resolve_dir,
 )
 from kd_vs_hpo.kd.teacher import TeacherEnsemble
 
@@ -190,16 +191,17 @@ def build_trainer(
             mode="max",
             save_top_k=1,
             filename=run_name + "epoch={epoch}-val_acc={val_acc:.4f}",
-            dirpath=f"{checkpoint_dir}/{run_name}",
+            dirpath=resolve_dir(f"{checkpoint_dir}/{run_name}"),
         ),
         MetricsHistoryCallback(
-            save_dir=f"{checkpoint_dir}/{run_name}",
+            save_dir=resolve_dir(f"{checkpoint_dir}/{run_name}"),
         ),
-        EarlyStopping(
-            monitor="val_loss",
-            patience=25,
-            mode="min"
-)
+        # EarlyStopping(
+        #     monitor="val_loss",
+        #     patience=25,
+        #     mode="min"
+        #     ),
+        # StopAfterEpochCallback(10)
     ]
     trainer = Trainer(
         max_epochs=max_epochs,

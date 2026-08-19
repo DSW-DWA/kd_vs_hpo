@@ -25,6 +25,7 @@ dependencies = [
     "torch==2.6.0",
     "torchvision==0.21.0",
     "transformers>=5.10.2",
+    "nats-bench>=1.8",
 ]
 
 [tool.setuptools.packages.find]
