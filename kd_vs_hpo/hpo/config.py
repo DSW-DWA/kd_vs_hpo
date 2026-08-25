@@ -21,14 +21,14 @@ DEFAULT_PRUNERS: tuple[PrunerName, ...] = ("successive_halving", "hyperband")
 
 @dataclass(frozen=True)
 class SearchSpace:
-    lr: tuple[float, float] = (4.5e-2, 5.5e-2)
+    lr: tuple[float, float] = (9.0e-2, 1.1e-1)
     weight_decay: tuple[float, float] = (4.5e-4, 5.5e-4)
-    initial_lr: float = 5.0e-2
+    initial_lr: float = 1.0e-1
     initial_weight_decay: float = 5.0e-4
     grid_lr: tuple[float, ...] = (
-        4.5e-2,
-        5.0e-2,
-        5.5e-2,
+        9.0e-2,
+        1.0e-1,
+        1.1e-1,
     )
     grid_weight_decay: tuple[float, ...] = (
         4.5e-4,

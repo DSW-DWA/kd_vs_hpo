@@ -10,17 +10,17 @@ gpu_ids: null
 
 search_space:
   lr:
-    - 4.5e-2
-    - 5.5e-2
+    - 9.0e-2
+    - 1.1e-1
   weight_decay:
     - 4.5e-4
     - 5.5e-4
-  initial_lr: 5.0e-2
+  initial_lr: 1.0e-1
   initial_weight_decay: 5.0e-4
   grid_lr:
-    - 4.5e-2
-    - 5.0e-2
-    - 5.5e-2
+    - 9.0e-2
+    - 1.0e-1
+    - 1.1e-1
   grid_weight_decay:
     - 4.5e-4
     - 5.0e-4

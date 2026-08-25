@@ -1,214 +1,150 @@
-"""Launch five independent plain-training runs for NATS architecture 8712."""
+"""Train five plain models for each selected NATS architecture."""
 
 from __future__ import annotations
 
 import logging
-import math
 import random
-import shutil
-from dataclasses import dataclass
 from pathlib import Path
 
 import torch
+from lightning import seed_everything
 from omegaconf import OmegaConf
+from torch import nn
 
 from kd_vs_hpo.common.config import TrainConfig
-from kd_vs_hpo.plain_training import (
-    PlainExperimentResult,
-    load_architectures_by_rows,
-    run_plain_experiment,
-)
+from kd_vs_hpo.common.flops import CounterMode, FlopsBudgetTracker, count_flops_params
+from kd_vs_hpo.common.nats import create_nats_model
+from kd_vs_hpo.common.train_pipeline import run_training_pipeline
+from kd_vs_hpo.common.utils import get_architectures_from_json
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-ARCHITECTURES_PATH = PROJECT_ROOT / "experiments/nats_architectures_10.json"
+ARCHITECTURES_PATH = PROJECT_ROOT / "experiments/nats_architectures_7.json"
 HPO_CONFIG_PATH = PROJECT_ROOT / "conf/hpo/hpo_base.yaml"
-OUTPUT_DIR = PROJECT_ROOT / "outputs/plain_pool_8712"
+OUTPUT_DIR = PROJECT_ROOT / "outputs/plain_pool_3_archs"
 DATA_ROOT = PROJECT_ROOT / "data"
-NATS_INDEX = 8712
-TRAINING_SEED = 42
-EPOCHS_PER_MODEL = 200
-POOL_SIZE = 5
-SAMPLING_SEED = 42
+
+NATS_INDICES = (8712, 11570, 1342)
+SEED = 42
+EPOCHS = 200
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True)
-class PlainPoolCandidate:
-    """One fixed optimizer configuration in the plain-training pool."""
-
-    label: str
-    initial_lr: float
-    weight_decay: float
-
-
-@dataclass(frozen=True)
-class PlainPoolSearchSpace:
-    """Optimizer values read from conf/hpo/hpo_base.yaml."""
-
-    initial_lr: float
-    initial_weight_decay: float
-    lr_bounds: tuple[float, float]
-    weight_decay_bounds: tuple[float, float]
-
-
-def load_search_space() -> PlainPoolSearchSpace:
-    """Load initial values and sampling bounds without starting HPO."""
-    config = OmegaConf.load(HPO_CONFIG_PATH)
-    try:
-        search = config.search_space
-        lr_bounds = tuple(float(value) for value in search.lr)
-        weight_decay_bounds = tuple(float(value) for value in search.weight_decay)
-        initial_lr = float(search.initial_lr)
-        initial_weight_decay = float(search.initial_weight_decay)
-    except (AttributeError, TypeError, ValueError) as error:
-        raise ValueError(f"Invalid search space in {HPO_CONFIG_PATH}") from error
-
-    if len(lr_bounds) != 2 or len(weight_decay_bounds) != 2:
-        raise ValueError("lr and weight_decay bounds must contain exactly two values")
-    lr_pair = (lr_bounds[0], lr_bounds[1])
-    weight_decay_pair = (weight_decay_bounds[0], weight_decay_bounds[1])
-    for name, (low, high) in (
-        ("lr", lr_pair),
-        ("weight_decay", weight_decay_pair),
-    ):
-        if low <= 0 or high <= low:
-            raise ValueError(f"{name} bounds must be positive and increasing")
-    if not lr_pair[0] <= initial_lr <= lr_pair[1]:
-        raise ValueError("initial_lr must be inside lr bounds")
-    if not weight_decay_pair[0] <= initial_weight_decay <= weight_decay_pair[1]:
-        raise ValueError("initial_weight_decay must be inside weight_decay bounds")
-
-    return PlainPoolSearchSpace(
-        initial_lr=initial_lr,
-        initial_weight_decay=initial_weight_decay,
-        lr_bounds=lr_pair,
-        weight_decay_bounds=weight_decay_pair,
-    )
-
-
-def build_hyperparameter_pool(
-    search_space: PlainPoolSearchSpace,
-    sampling_seed: int = SAMPLING_SEED,
-) -> tuple[PlainPoolCandidate, ...]:
-    """Return the configured initial point plus four reproducible samples."""
-    generator = random.Random(sampling_seed)
-    candidates = [
-        PlainPoolCandidate(
-            label="initial",
-            initial_lr=search_space.initial_lr,
-            weight_decay=search_space.initial_weight_decay,
-        )
+def _load_candidates() -> list[tuple[str, float, float]]:
+    search = OmegaConf.load(HPO_CONFIG_PATH).search_space
+    corners = [
+        (float(lr), float(weight_decay))
+        for lr in search.lr
+        for weight_decay in search.weight_decay
     ]
-    for number in range(1, POOL_SIZE):
-        initial_lr = math.exp(
-            generator.uniform(
-                math.log(search_space.lr_bounds[0]),
-                math.log(search_space.lr_bounds[1]),
-            )
-        )
-        weight_decay = math.exp(
-            generator.uniform(
-                math.log(search_space.weight_decay_bounds[0]),
-                math.log(search_space.weight_decay_bounds[1]),
-            )
-        )
-        candidates.append(
-            PlainPoolCandidate(
-                label=f"sample_{number}",
-                initial_lr=initial_lr,
-                weight_decay=weight_decay,
-            )
-        )
-    return tuple(candidates)
+    random.Random(SEED).shuffle(corners)
+    return [
+        ("initial", float(search.initial_lr), float(search.initial_weight_decay)),
+        *[
+            (f"sample_{number}", lr, weight_decay)
+            for number, (lr, weight_decay) in enumerate(corners, start=1)
+        ],
+    ]
 
 
-def resolve_auto_device() -> torch.device:
-    """Select the best available device without requiring a command-line option."""
-    if torch.cuda.is_available():
-        return torch.device("cuda")
-    if torch.backends.mps.is_available():
-        return torch.device("mps")
-    return torch.device("cpu")
+def _load_architectures() -> list[dict]:
+    records = get_architectures_from_json(str(ARCHITECTURES_PATH))
+    by_index = {int(record["arch_index"]): record for record in records}
+    missing = [index for index in NATS_INDICES if index not in by_index]
+    if missing:
+        raise ValueError(f"Architectures were not found: {missing}")
+    return [by_index[index] for index in NATS_INDICES]
 
 
-def load_architecture_8712() -> dict:
-    """Load the single selected NATS architecture from the project experiment set."""
-    architectures = load_architectures_by_rows(ARCHITECTURES_PATH, None)
-    for architecture in architectures:
-        if architecture["arch_index"] == NATS_INDEX:
-            return architecture
-    raise ValueError(f"Architecture with index {NATS_INDEX} was not found")
-
-
-def _train_config(run_dir: Path) -> TrainConfig:
-    return TrainConfig(
-        seed=TRAINING_SEED,
-        data_root=DATA_ROOT,
-        checkpoint_dir=run_dir / "checkpoints",
-        log_dir=run_dir / "logs",
-    )
-
-
-def export_checkpoint(
-    candidate: PlainPoolCandidate,
-    result: PlainExperimentResult,
+def _train_one(
+    architecture: dict,
+    label: str,
+    lr: float,
+    weight_decay: float,
+    device: torch.device,
 ) -> Path:
-    """Publish the plain-training checkpoint under a stable reusable name."""
-    if len(result.runs) != 1:
-        raise ValueError("Each pool candidate must produce exactly one run")
-    source_path = Path(str(result.runs.iloc[0]["checkpoint_path"]))
-    if not source_path.is_file():
-        raise FileNotFoundError(f"Plain-training checkpoint not found: {source_path}")
-
-    checkpoint_dir = OUTPUT_DIR / "checkpoints"
-    checkpoint_dir.mkdir(parents=True, exist_ok=True)
-    checkpoint_path = checkpoint_dir / f"{candidate.label}.pt"
-    temporary_path = checkpoint_path.with_suffix(".tmp")
-    shutil.copy2(source_path, temporary_path)
-    temporary_path.replace(checkpoint_path)
-    return checkpoint_path
-
-
-def run_plain_pool() -> list[tuple[PlainPoolCandidate, PlainExperimentResult]]:
-    """Train architecture 8712 once for each fixed hyperparameter configuration."""
-    architecture = load_architecture_8712()
-    candidates = build_hyperparameter_pool(load_search_space())
-    device = resolve_auto_device()
-    logger.info(
-        "Plain pool: arch=%s models=%s epochs=%s seed=%s device=%s output=%s",
-        NATS_INDEX,
-        POOL_SIZE,
-        EPOCHS_PER_MODEL,
-        TRAINING_SEED,
-        device,
-        OUTPUT_DIR,
+    arch_index = int(architecture["arch_index"])
+    run_root = OUTPUT_DIR / label / f"arch_{arch_index}"
+    config = TrainConfig(
+        seed=SEED,
+        data_root=DATA_ROOT,
+        checkpoint_dir=run_root / "checkpoints",
+        log_dir=run_root / "logs",
     )
-    results: list[tuple[PlainPoolCandidate, PlainExperimentResult]] = []
-    for pool_index, candidate in enumerate(candidates, start=1):
-        run_dir = OUTPUT_DIR / candidate.label
-        logger.info(
-            "Starting model %s/%s: %s lr=%.8g weight_decay=%.8g",
-            pool_index,
-            POOL_SIZE,
-            candidate.label,
-            candidate.initial_lr,
-            candidate.weight_decay,
-        )
-        result = run_plain_experiment(
-            architectures=[architecture],
-            initial_lr=candidate.initial_lr,
-            weight_decay=candidate.weight_decay,
-            train_config=_train_config(run_dir),
-            device=device,
-            output_dir=run_dir,
-            trial_epochs=(EPOCHS_PER_MODEL,),
-            verbose=True,
-        )
-        checkpoint_path = export_checkpoint(candidate, result)
-        logger.info("Reusable checkpoint saved: %s", checkpoint_path)
-        results.append((candidate, result))
-    return results
+    target = OUTPUT_DIR / "checkpoints" / f"arch_{arch_index}_{label}.pt"
+
+    seed_everything(SEED)
+    model = create_nats_model(architecture)
+    forward_flops, _ = count_flops_params(model)
+    run_training_pipeline(
+        model=model,
+        criterion=nn.CrossEntropyLoss(),
+        train_step_flops=int(forward_flops * config.train_step_multiplier),
+        eval_step_flops=forward_flops,
+        run_name=f"arch_{arch_index}_{label}",
+        checkpoint_dir=config.checkpoint_dir,
+        log_dir=config.log_dir,
+        data_root=config.data_root,
+        max_epochs=EPOCHS,
+        deterministic=config.deterministic,
+        amp=config.amp,
+        grad_clip_norm=config.grad_clip_norm or 0.0,
+        seed=config.seed,
+        batch_size=config.batch_size,
+        num_workers=config.num_workers,
+        validation_fraction=config.validation_fraction,
+        device=device,
+        optimizer_kwargs={
+            "lr": lr,
+            "momentum": config.momentum,
+            "weight_decay": weight_decay,
+        },
+        scheduler_kwargs={"T_max": EPOCHS},
+        teacher_ensemble=None,
+        kd_loss=None,
+        flops_tracker=FlopsBudgetTracker(0, CounterMode.OFF),
+        num_classes=int(architecture.get("num_classes", 10)),
+        reusable_checkpoint_path=target,
+    )
+
+    return target
+
+
+def run_plain_pool() -> None:
+    architectures = _load_architectures()
+    candidates = _load_candidates()
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    total = len(architectures) * len(candidates)
+    completed = 0
+    logger.info(
+        "Training %s models: arches=%s epochs=%s seed=%s device=%s",
+        total,
+        NATS_INDICES,
+        EPOCHS,
+        SEED,
+        device,
+    )
+
+    for architecture in architectures:
+        for label, lr, weight_decay in candidates:
+            completed += 1
+            logger.info(
+                "Starting %s/%s: arch=%s %s lr=%g weight_decay=%g",
+                completed,
+                total,
+                architecture["arch_index"],
+                label,
+                lr,
+                weight_decay,
+            )
+            checkpoint = _train_one(
+                architecture,
+                label,
+                lr,
+                weight_decay,
+                device,
+            )
+            logger.info("Reusable checkpoint saved: %s", checkpoint)
 
 
 def main() -> None:
@@ -217,9 +153,7 @@ def main() -> None:
         format="%(asctime)s | %(levelname)s | %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
-    for candidate, result in run_plain_pool():
-        print(f"\n{candidate.label}")
-        print(result.runs.to_string(index=False))
+    run_plain_pool()
 
 
 if __name__ == "__main__":

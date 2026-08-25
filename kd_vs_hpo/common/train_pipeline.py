@@ -72,6 +72,7 @@ def run_training_pipeline(
         kd_loss: nn.Module | None = None,
         flops_tracker: FlopsBudgetTracker | None = None,
         num_classes: int = 10,
+        reusable_checkpoint_path: Path | None = None,
 ):  
 
     train_loader, val_loader, test_loader, *_ = build_cifar10_dataloaders(
@@ -103,7 +104,32 @@ def run_training_pipeline(
         grad_clip_norm,
     )
     trainer.fit(module, train_loader, val_loader)
-    trainer.test(module, test_loader)
+    if reusable_checkpoint_path is None:
+        trainer.test(module, test_loader)
+        return
+
+    best_checkpoint_path = Path(trainer.checkpoint_callback.best_model_path)
+    if not best_checkpoint_path.is_file():
+        raise RuntimeError(f"Best checkpoint was not saved: {best_checkpoint_path}")
+    trainer.test(module, test_loader, ckpt_path=str(best_checkpoint_path))
+
+    reusable_checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = reusable_checkpoint_path.with_suffix(".tmp")
+    checkpoint = torch.load(
+        best_checkpoint_path,
+        map_location="cpu",
+        weights_only=False,
+    )
+    model_state = {
+        name.removeprefix("model."): value.detach().cpu()
+        for name, value in checkpoint["state_dict"].items()
+        if name.startswith("model.")
+    }
+    if not model_state:
+        raise RuntimeError(f"Model weights were not found in {best_checkpoint_path}")
+    module.model.load_state_dict(model_state, strict=True)
+    torch.save({"model": model_state}, temporary_path)
+    temporary_path.replace(reusable_checkpoint_path)
 
 
 @hydra.main(
