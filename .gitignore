@@ -14,6 +14,7 @@ data/
 runs/
 hpo_output/
 checkpoints/
+!experiments/checkpoints/
 logs/
 multirun/
 outputs/
