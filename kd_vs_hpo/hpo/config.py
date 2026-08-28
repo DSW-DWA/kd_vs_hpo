@@ -46,6 +46,14 @@ class OptunaConfig:
     startup_trials: int = 5
     min_resource: int = 10
     reduction_factor: int = 3
+    fixed_trial_seed: bool = False
+    fresh_dataloaders_per_trial: bool = False
+
+
+@dataclass(frozen=True)
+class ImportedTrialConfig:
+    checkpoint_path: Path
+    metrics_path: Path
 
 
 @dataclass(frozen=True)
@@ -59,6 +67,7 @@ class HPOExperimentConfig:
     num_processes: int = 1
     gpu_ids: tuple[int, ...] | None = None
     device: DeviceName = "auto"
+    imported_trial: ImportedTrialConfig | None = None
 
 
 def validate_experiment(experiment: HPOExperimentConfig) -> None:
@@ -75,6 +84,11 @@ def validate_experiment(experiment: HPOExperimentConfig) -> None:
         raise ValueError("min_resource must be positive")
     if optuna.reduction_factor < 2:
         raise ValueError("reduction_factor must be at least 2")
+    if optuna.fresh_dataloaders_per_trial and not optuna.fixed_trial_seed:
+        raise ValueError(
+            "fresh_dataloaders_per_trial requires fixed_trial_seed so the "
+            "validation split stays unchanged"
+        )
     if not optuna.samplers or not optuna.pruners:
         raise ValueError("At least one sampler and pruner must be selected")
     if len(set(optuna.samplers)) != len(optuna.samplers):
@@ -88,6 +102,12 @@ def validate_experiment(experiment: HPOExperimentConfig) -> None:
         raise ValueError(f"Unsupported samplers: {sorted(unsupported_samplers)}")
     if unsupported_pruners:
         raise ValueError(f"Unsupported pruners: {sorted(unsupported_pruners)}")
+
+    if experiment.imported_trial is not None:
+        if experiment.arch_rows is None or len(experiment.arch_rows) != 1:
+            raise ValueError("An imported trial requires exactly one architecture row")
+        if len(optuna.samplers) != 1 or len(optuna.pruners) != 1:
+            raise ValueError("An imported trial requires exactly one sampler and pruner")
 
     resource_pruners = {"successive_halving", "hyperband"}
     if (

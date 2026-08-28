@@ -10,6 +10,7 @@ from omegaconf import DictConfig, ListConfig
 from kd_vs_hpo.common.config import TrainConfig
 from kd_vs_hpo.hpo.config import (
     HPOExperimentConfig,
+    ImportedTrialConfig,
     OptunaConfig,
     SearchSpace,
     validate_experiment,
@@ -69,6 +70,10 @@ def build_experiment(cfg: DictConfig) -> HPOExperimentConfig:
             startup_trials=int(hpo_cfg.optuna.startup_trials),
             min_resource=int(hpo_cfg.optuna.min_resource),
             reduction_factor=int(hpo_cfg.optuna.reduction_factor),
+            fixed_trial_seed=bool(hpo_cfg.optuna.fixed_trial_seed),
+            fresh_dataloaders_per_trial=bool(
+                hpo_cfg.optuna.fresh_dataloaders_per_trial
+            ),
         ),
         architectures_path=project_path(str(general_cfg.architectures_path)),
         output_dir=project_path(str(hpo_cfg.output_dir)),
@@ -84,6 +89,16 @@ def build_experiment(cfg: DictConfig) -> HPOExperimentConfig:
             else tuple(int(value) for value in hpo_cfg.gpu_ids)
         ),
         device=str(hpo_cfg.device),
+        imported_trial=(
+            None
+            if hpo_cfg.imported_trial is None
+            else ImportedTrialConfig(
+                checkpoint_path=project_path(
+                    str(hpo_cfg.imported_trial.checkpoint_path)
+                ),
+                metrics_path=project_path(str(hpo_cfg.imported_trial.metrics_path)),
+            )
+        ),
     )
     validate_experiment(experiment)
     return experiment

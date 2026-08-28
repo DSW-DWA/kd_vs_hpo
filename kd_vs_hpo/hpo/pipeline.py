@@ -84,6 +84,8 @@ def run_hpo_experiment(
         tasks,
         devices,
         local_loaders=local_loaders,
+        n_train=n_train,
+        n_val=n_val,
     )
     for trial_record in trial_records:
         flops_tracker.spend(int(trial_record["total_flops"]))

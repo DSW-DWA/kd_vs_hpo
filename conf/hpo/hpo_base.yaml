@@ -1,12 +1,18 @@
 device: auto
 
-output_dir: hpo_output
+output_dir: outputs/hpo_8712_tpe_hyperband
 checkpoint_dir: ${hpo.output_dir}/checkpoints
 log_dir: ${hpo.output_dir}/runs
 arch_rows:
+  - 2
+num_processes: 2
+gpu_ids:
   - 0
-num_processes: 1
-gpu_ids: null
+  - 1
+
+imported_trial:
+  checkpoint_path: outputs/plain_pool_3_archs/checkpoints/arch_8712_initial.pt
+  metrics_path: outputs/plain_pool_3_archs/initial/arch_8712/checkpoints/arch_8712_initial/metrics.csv
 
 search_space:
   lr:
@@ -31,12 +37,10 @@ optuna:
   max_epochs: 200
   samplers:
     - tpe
-    - grid
-    - cmaes
-    - gp
   pruners:
-    - successive_halving
     - hyperband
-  startup_trials: 5
+  startup_trials: 2
   min_resource: 10
   reduction_factor: 3
+  fixed_trial_seed: true
+  fresh_dataloaders_per_trial: true

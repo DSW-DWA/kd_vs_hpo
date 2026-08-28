@@ -172,5 +172,6 @@ def _evaluate_checkpoint(
         deterministic=experiment.train.deterministic,
         amp=experiment.train.amp,
         grad_clip_norm=experiment.train.grad_clip_norm,
+        device=device,
     )
     return 100.0 * metrics["val_acc"]

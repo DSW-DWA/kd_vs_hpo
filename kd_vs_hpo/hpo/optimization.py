@@ -1,3 +1,4 @@
+import csv
 import gc
 import time
 import warnings
@@ -6,8 +7,11 @@ from typing import Any
 
 import optuna
 import torch
+from optuna.storages import JournalStorage
+from optuna.storages.journal import JournalFileBackend
 from torch.utils.data import DataLoader
 
+from kd_vs_hpo.common.dataloader import build_cifar10_dataloaders
 from kd_vs_hpo.common.flops import CounterMode, FlopsBudgetTracker
 from kd_vs_hpo.common.nats import create_nats_model
 from kd_vs_hpo.common.utils import set_seed
@@ -36,6 +40,9 @@ def run_study(
     n_train: int,
     n_val: int,
     progress_dir: Path | None = None,
+    storage_path: Path | None = None,
+    n_trials: int | None = None,
+    sampler_seed_offset: int = 0,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     sampler_seed = (
         experiment.train.seed
@@ -59,14 +66,16 @@ def run_study(
         experiment.train.train_step_multiplier * forward_flops_per_sample * n_train
     )
     validation_flops_per_epoch = int(forward_flops_per_sample * n_val)
-    study = optuna.create_study(
+    study = _create_study(
         study_name=study_name,
-        direction="maximize",
-        sampler=_create_sampler(sampler_name, sampler_seed, experiment),
-        pruner=_create_pruner(pruner_name, experiment),
+        sampler_name=sampler_name,
+        pruner_name=pruner_name,
+        sampler_seed=sampler_seed + sampler_seed_offset,
+        experiment=experiment,
+        storage_path=storage_path,
     )
     initial_trial = _initial_trial_parameters(experiment)
-    if sampler_name != "grid":
+    if storage_path is None and sampler_name != "grid":
         study.enqueue_trial(initial_trial)
 
     def objective(trial: optuna.Trial) -> float:
@@ -74,12 +83,31 @@ def run_study(
         weight_decay = trial.suggest_float(
             "weight_decay", *experiment.search_space.weight_decay, log=True
         )
-        trial_seed = trial_seed_base * 10_000 + trial.number
+        trial_seed = (
+            experiment.train.seed
+            if experiment.optuna.fixed_trial_seed
+            else trial_seed_base * 10_000 + trial.number
+        )
         trial_started = time.perf_counter()
         set_seed(trial_seed, deterministic=experiment.train.deterministic)
-        if train_loader.generator is not None:
-            train_loader.generator.manual_seed(trial_seed)
         model = create_nats_model(architecture)
+        objective_train_loader = train_loader
+        objective_val_loader = val_loader
+        if experiment.optuna.fresh_dataloaders_per_trial:
+            objective_train_loader, objective_val_loader, _, *_ = (
+                build_cifar10_dataloaders(
+                    experiment.train.checkpoint_dir,
+                    experiment.train.log_dir,
+                    experiment.train.data_root,
+                    trial_seed,
+                    experiment.train.batch_size,
+                    experiment.train.num_workers,
+                    experiment.train.validation_fraction,
+                    device,
+                )
+            )
+        elif objective_train_loader.generator is not None:
+            objective_train_loader.generator.manual_seed(trial_seed)
         checkpoint = _checkpoint_path(experiment.output_dir, study_name, trial.number)
         flops_tracker = FlopsBudgetTracker(
             budget=(train_flops_per_epoch + validation_flops_per_epoch)
@@ -118,14 +146,15 @@ def run_study(
         try:
             outcome = fit_lightning_trial(
                 lightning_module=lightning_module,
-                train_loader=train_loader,
-                val_loader=val_loader,
+                train_loader=objective_train_loader,
+                val_loader=objective_val_loader,
                 trial=trial,
                 study_name=study_name,
                 checkpoint_path=checkpoint,
                 epoch_records=epoch_records,
                 train_config=experiment.train,
                 max_epochs=experiment.optuna.max_epochs,
+                device=device,
             )
             completed_epochs = outcome.completed_epochs
             best_epoch = outcome.best_epoch
@@ -215,22 +244,232 @@ def run_study(
                         stacklevel=2,
                     )
             del lightning_module, model
+            if experiment.optuna.fresh_dataloaders_per_trial:
+                del objective_train_loader, objective_val_loader
             gc.collect()
             if device.type == "cuda":
                 torch.cuda.empty_cache()
             elif device.type == "mps":
                 torch.mps.empty_cache()
 
-    study.optimize(objective, n_trials=experiment.optuna.n_trials)
+    study.optimize(
+        objective,
+        n_trials=experiment.optuna.n_trials if n_trials is None else n_trials,
+    )
     return trial_records, epoch_records
 
 
+def import_initial_trial(
+    *,
+    architecture: dict[str, Any],
+    sampler_name: SamplerName,
+    pruner_name: PrunerName,
+    experiment: HPOExperimentConfig,
+    storage_path: Path,
+    forward_flops_per_sample: int,
+    n_train: int,
+    n_val: int,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    imported = experiment.imported_trial
+    if imported is None:
+        raise ValueError("No imported trial is configured")
+    if not imported.checkpoint_path.is_file():
+        raise FileNotFoundError(
+            f"Initial checkpoint was not found: {imported.checkpoint_path}"
+        )
+    if not imported.metrics_path.is_file():
+        raise FileNotFoundError(f"Initial metrics were not found: {imported.metrics_path}")
+    if storage_path.exists():
+        raise FileExistsError(
+            f"Optuna journal already exists: {storage_path}. "
+            "Use a new output_dir for a new experiment."
+        )
+
+    sampler_seed = (
+        experiment.train.seed
+        + architecture["arch_row"] * 100
+        + SAMPLER_OFFSETS[sampler_name]
+    )
+    study_name = (
+        f"arch_{architecture['arch_index']}__{sampler_name}_{pruner_name}"
+    )
+    study = _create_study(
+        study_name=study_name,
+        sampler_name=sampler_name,
+        pruner_name=pruner_name,
+        sampler_seed=sampler_seed,
+        experiment=experiment,
+        storage_path=storage_path,
+    )
+    curve = _read_validation_curve(imported.metrics_path, study_name)
+    initial_parameters = _initial_trial_parameters(experiment)
+    study.enqueue_trial(
+        initial_parameters,
+        user_attrs={
+            "imported": True,
+            "source_checkpoint": str(imported.checkpoint_path),
+        },
+    )
+
+    def replay_initial(trial: optuna.Trial) -> float:
+        trial.suggest_float("lr", *experiment.search_space.lr, log=True)
+        trial.suggest_float(
+            "weight_decay", *experiment.search_space.weight_decay, log=True
+        )
+        for row in curve:
+            trial.report(row["val_acc1"], step=row["epoch"])
+            if trial.should_prune():
+                raise RuntimeError("Imported trial_0 was unexpectedly pruned")
+        return max(row["val_acc1"] for row in curve)
+
+    study.optimize(replay_initial, n_trials=1)
+    frozen = study.trials[0]
+    if frozen.number != 0 or frozen.state != optuna.trial.TrialState.COMPLETE:
+        raise RuntimeError("The imported checkpoint did not become COMPLETE trial_0")
+
+    checkpoint = _checkpoint_path(experiment.output_dir, study_name, 0)
+    _save_imported_checkpoint(imported.checkpoint_path, checkpoint, architecture)
+    best_row = max(curve, key=lambda row: row["val_acc1"])
+    completed_epochs = max(int(row["epoch"]) for row in curve)
+    train_flops = int(
+        experiment.train.train_step_multiplier
+        * forward_flops_per_sample
+        * n_train
+        * completed_epochs
+    )
+    validation_flops = int(
+        forward_flops_per_sample * n_val * completed_epochs
+    )
+    context = {
+        "study_name": study_name,
+        "sampler": sampler_name,
+        "pruner": pruner_name,
+        "arch_row": architecture["arch_row"],
+        "arch_index": architecture["arch_index"],
+        "arch_str": architecture["arch_str"],
+        "trial_id": 0,
+        "trial_seed": experiment.train.seed,
+        "lr": initial_parameters["lr"],
+        "weight_decay": initial_parameters["weight_decay"],
+    }
+    record = _trial_record(
+        context=context,
+        state="COMPLETE",
+        stop_reason="IMPORTED_INITIAL_CHECKPOINT",
+        completed_epochs=completed_epochs,
+        best_epoch=int(best_row["epoch"]),
+        best_val_acc1=float(best_row["val_acc1"]),
+        checkpoint=checkpoint,
+        train_flops=train_flops,
+        validation_flops=validation_flops,
+    )
+    record["trial_seconds"] = 0.0
+    return record, curve
+
+
+def _create_study(
+    *,
+    study_name: str,
+    sampler_name: SamplerName,
+    pruner_name: PrunerName,
+    sampler_seed: int,
+    experiment: HPOExperimentConfig,
+    storage_path: Path | None,
+) -> optuna.Study:
+    storage = None
+    if storage_path is not None:
+        storage_path.parent.mkdir(parents=True, exist_ok=True)
+        storage = JournalStorage(JournalFileBackend(str(storage_path)))
+    return optuna.create_study(
+        study_name=study_name,
+        direction="maximize",
+        sampler=_create_sampler(
+            sampler_name,
+            sampler_seed,
+            experiment,
+            distributed=storage is not None,
+        ),
+        pruner=_create_pruner(pruner_name, experiment),
+        storage=storage,
+        load_if_exists=storage is not None,
+    )
+
+
+def _read_validation_curve(
+    metrics_path: Path,
+    study_name: str,
+) -> list[dict[str, Any]]:
+    by_epoch: dict[int, dict[str, str]] = {}
+    with metrics_path.open("r", encoding="utf-8", newline="") as file:
+        for row in csv.DictReader(file):
+            if not row.get("epoch") or not row.get("val_acc"):
+                continue
+            by_epoch[int(row["epoch"])] = row
+    if not by_epoch:
+        raise ValueError(f"No validation metrics were found in {metrics_path}")
+
+    records = []
+    best = float("-inf")
+    train_flops_per_epoch = 0
+    validation_flops_per_epoch = 0
+    for epoch_index in sorted(by_epoch):
+        source = by_epoch[epoch_index]
+        val_acc1 = 100.0 * float(source["val_acc"])
+        best = max(best, val_acc1)
+        train_flops_per_epoch = int(float(source.get("train_flops") or 0))
+        validation_flops_per_epoch = int(float(source.get("val_flops") or 0))
+        epoch = epoch_index + 1
+        records.append(
+            {
+                "study_name": study_name,
+                "trial_id": 0,
+                "epoch": epoch,
+                "train_loss": float("nan"),
+                "val_acc1": val_acc1,
+                "best_val_acc1": best,
+                "learning_rate": float(source.get("lr") or "nan"),
+                "cumulative_trial_flops": epoch
+                * (train_flops_per_epoch + validation_flops_per_epoch),
+            }
+        )
+    return records
+
+
+def _save_imported_checkpoint(
+    source_path: Path,
+    target_path: Path,
+    architecture: dict[str, Any],
+) -> None:
+    source = torch.load(source_path, map_location="cpu", weights_only=False)
+    model_state = source.get("model")
+    if not isinstance(model_state, dict) or not model_state:
+        raise ValueError(f"Model weights were not found in {source_path}")
+    model = create_nats_model(architecture)
+    model.load_state_dict(model_state, strict=True)
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = target_path.with_suffix(".tmp")
+    torch.save(
+        {
+            "model": {name: value.detach().cpu() for name, value in model_state.items()},
+            "arch_record": architecture,
+        },
+        temporary_path,
+    )
+    temporary_path.replace(target_path)
+
+
 def _create_sampler(
-    name: SamplerName, seed: int, experiment: HPOExperimentConfig
+    name: SamplerName,
+    seed: int,
+    experiment: HPOExperimentConfig,
+    *,
+    distributed: bool = False,
 ) -> optuna.samplers.BaseSampler:
     if name == "tpe":
         return optuna.samplers.TPESampler(
-            seed=seed, n_startup_trials=experiment.optuna.startup_trials
+            seed=seed,
+            n_startup_trials=experiment.optuna.startup_trials,
+            constant_liar=distributed,
         )
     if name == "grid":
         return optuna.samplers.GridSampler(

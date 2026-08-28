@@ -82,7 +82,7 @@ class OptunaMetricsCallback(L.Callback):
                 self.checkpoint_path,
             )
 
-        self.trial.report(self.best_val_acc1, step=epoch)
+        self.trial.report(val_acc1, step=epoch)
         self.epoch_records.append(
             {
                 "study_name": self.study_name,
@@ -164,6 +164,7 @@ def fit_lightning_trial(
     epoch_records: list[dict[str, Any]],
     train_config: TrainConfig,
     max_epochs: int,
+    device: torch.device | None = None,
 ) -> LightningTrialResult:
     callback = OptunaMetricsCallback(
         trial=trial,
@@ -179,6 +180,7 @@ def fit_lightning_trial(
         deterministic=train_config.deterministic,
         amp=train_config.amp,
         grad_clip_norm=_gradient_clip_value(train_config.grad_clip_norm),
+        device=device,
     )
     trainer.num_sanity_val_steps = 0
     trainer.callbacks.append(callback)
@@ -200,6 +202,7 @@ def validate_lightning_module(
     deterministic: bool,
     amp: bool,
     grad_clip_norm: float | None,
+    device: torch.device | None = None,
 ) -> dict[str, float]:
     """Validate a KDLightningModule and return scalar Lightning metrics."""
     trainer = build_trainer(
@@ -210,6 +213,7 @@ def validate_lightning_module(
         deterministic=deterministic,
         amp=amp,
         grad_clip_norm=_gradient_clip_value(grad_clip_norm),
+        device=device,
     )
     results = trainer.validate(model=lightning_module, dataloaders=val_loader)
     if not results:

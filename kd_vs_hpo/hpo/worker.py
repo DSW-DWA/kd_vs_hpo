@@ -1,7 +1,7 @@
 import multiprocessing as mp
 from collections import Counter
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 
 from kd_vs_hpo.common.dataloader import build_cifar10_dataloaders
 from kd_vs_hpo.hpo.config import HPOExperimentConfig, PrunerName, SamplerName
-from kd_vs_hpo.hpo.optimization import run_study
+from kd_vs_hpo.hpo.optimization import import_initial_trial, run_study
 
 
 WorkerLoaders = tuple[DataLoader, DataLoader, int, int]
@@ -27,6 +27,9 @@ class StudyTask:
     experiment: HPOExperimentConfig
     device: str
     progress_dir: Path
+    storage_path: Path | None = None
+    n_trials: int | None = None
+    sampler_seed_offset: int = 0
 
     @property
     def study_name(self) -> str:
@@ -59,6 +62,9 @@ def run_study_process(
         n_train=n_train,
         n_val=n_val,
         progress_dir=task.progress_dir,
+        storage_path=task.storage_path,
+        n_trials=task.n_trials,
+        sampler_seed_offset=task.sampler_seed_offset,
     )
 
 
@@ -156,9 +162,20 @@ def run_study_tasks(
     worker_devices: tuple[str, ...],
     *,
     local_loaders: WorkerLoaders | None = None,
+    n_train: int,
+    n_val: int,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     trial_records: list[dict[str, Any]] = []
     epoch_records: list[dict[str, Any]] = []
+
+    if len(tasks) == 1 and tasks[0].experiment.imported_trial is not None:
+        return _run_imported_study(
+            tasks[0],
+            worker_devices,
+            local_loaders=local_loaders,
+            n_train=n_train,
+            n_val=n_val,
+        )
 
     if len(worker_devices) == 1:
         for task in tasks:
@@ -175,6 +192,73 @@ def run_study_tasks(
     try:
         futures = [
             executors[task.device].submit(run_study_process, task) for task in tasks
+        ]
+        for future in as_completed(futures):
+            trials, epochs = future.result()
+            trial_records.extend(trials)
+            epoch_records.extend(epochs)
+    finally:
+        for executor in executors.values():
+            executor.shutdown(wait=True, cancel_futures=False)
+    return trial_records, epoch_records
+
+
+def _run_imported_study(
+    task: StudyTask,
+    worker_devices: tuple[str, ...],
+    *,
+    local_loaders: WorkerLoaders | None,
+    n_train: int,
+    n_val: int,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    storage_path = task.experiment.output_dir / "optuna_journal.log"
+    imported_record, imported_epochs = import_initial_trial(
+        architecture=task.architecture,
+        sampler_name=task.sampler,
+        pruner_name=task.pruner,
+        experiment=task.experiment,
+        storage_path=storage_path,
+        forward_flops_per_sample=task.forward_flops_per_sample,
+        n_train=n_train,
+        n_val=n_val,
+    )
+    remaining = task.experiment.optuna.n_trials - 1
+    if remaining <= 0:
+        return [imported_record], imported_epochs
+
+    worker_count = min(len(worker_devices), remaining)
+    base, extra = divmod(remaining, worker_count)
+    worker_tasks = []
+    for worker_index, device in enumerate(worker_devices[:worker_count]):
+        quota = base + (1 if worker_index < extra else 0)
+        worker_tasks.append(
+            replace(
+                task,
+                device=device,
+                progress_dir=task.progress_dir / f"worker_{worker_index}",
+                storage_path=storage_path,
+                n_trials=quota,
+                sampler_seed_offset=worker_index + 1,
+            )
+        )
+
+    trial_records = [imported_record]
+    epoch_records = list(imported_epochs)
+    if len(worker_tasks) == 1:
+        trials, epochs = run_study_process(worker_tasks[0], local_loaders)
+        trial_records.extend(trials)
+        epoch_records.extend(epochs)
+        return trial_records, epoch_records
+
+    context = mp.get_context("spawn")
+    executors = {
+        device: ProcessPoolExecutor(max_workers=count, mp_context=context)
+        for device, count in Counter(task.device for task in worker_tasks).items()
+    }
+    try:
+        futures = [
+            executors[worker_task.device].submit(run_study_process, worker_task)
+            for worker_task in worker_tasks
         ]
         for future in as_completed(futures):
             trials, epochs = future.result()
