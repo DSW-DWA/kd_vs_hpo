@@ -10,8 +10,7 @@ from torch.utils.data import DataLoader
 
 from kd_vs_hpo.common.dataloader import build_cifar10_dataloaders
 from kd_vs_hpo.hpo.config import HPOExperimentConfig, PrunerName, SamplerName
-from kd_vs_hpo.hpo.optimization import import_initial_trial, run_study
-
+from kd_vs_hpo.hpo.optimization import import_trials, run_study
 
 WorkerLoaders = tuple[DataLoader, DataLoader, int, int]
 _worker_loaders: WorkerLoaders | None = None
@@ -76,17 +75,15 @@ def _get_worker_loaders(
     cache_key = experiment.train, str(device)
     if _worker_loaders is None or _worker_loaders_key != cache_key:
         config = experiment.train
-        train_loader, val_loader, _, n_train, n_val, _ = (
-            build_cifar10_dataloaders(
-                config.checkpoint_dir,
-                config.log_dir,
-                config.data_root,
-                config.seed,
-                config.batch_size,
-                config.num_workers,
-                config.validation_fraction,
-                device,
-            )
+        train_loader, val_loader, _, n_train, n_val, _ = build_cifar10_dataloaders(
+            config.checkpoint_dir,
+            config.log_dir,
+            config.data_root,
+            config.seed,
+            config.batch_size,
+            config.num_workers,
+            config.validation_fraction,
+            device,
         )
         _worker_loaders = train_loader, val_loader, n_train, n_val
         _worker_loaders_key = cache_key
@@ -168,7 +165,7 @@ def run_study_tasks(
     trial_records: list[dict[str, Any]] = []
     epoch_records: list[dict[str, Any]] = []
 
-    if len(tasks) == 1 and tasks[0].experiment.imported_trial is not None:
+    if len(tasks) == 1 and tasks[0].experiment.imported_trials:
         return _run_imported_study(
             tasks[0],
             worker_devices,
@@ -212,7 +209,7 @@ def _run_imported_study(
     n_val: int,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     storage_path = task.experiment.output_dir / "optuna_journal.log"
-    imported_record, imported_epochs = import_initial_trial(
+    imported_records, imported_epochs = import_trials(
         architecture=task.architecture,
         sampler_name=task.sampler,
         pruner_name=task.pruner,
@@ -222,9 +219,9 @@ def _run_imported_study(
         n_train=n_train,
         n_val=n_val,
     )
-    remaining = task.experiment.optuna.n_trials - 1
+    remaining = task.experiment.optuna.n_trials - len(imported_records)
     if remaining <= 0:
-        return [imported_record], imported_epochs
+        return imported_records, imported_epochs
 
     worker_count = min(len(worker_devices), remaining)
     base, extra = divmod(remaining, worker_count)
@@ -242,7 +239,7 @@ def _run_imported_study(
             )
         )
 
-    trial_records = [imported_record]
+    trial_records = list(imported_records)
     epoch_records = list(imported_epochs)
     if len(worker_tasks) == 1:
         trials, epochs = run_study_process(worker_tasks[0], local_loaders)

@@ -54,6 +54,8 @@ class OptunaConfig:
 class ImportedTrialConfig:
     checkpoint_path: Path
     metrics_path: Path
+    lr: float
+    weight_decay: float
 
 
 @dataclass(frozen=True)
@@ -67,7 +69,7 @@ class HPOExperimentConfig:
     num_processes: int = 1
     gpu_ids: tuple[int, ...] | None = None
     device: DeviceName = "auto"
-    imported_trial: ImportedTrialConfig | None = None
+    imported_trials: tuple[ImportedTrialConfig, ...] = ()
 
 
 def validate_experiment(experiment: HPOExperimentConfig) -> None:
@@ -103,11 +105,13 @@ def validate_experiment(experiment: HPOExperimentConfig) -> None:
     if unsupported_pruners:
         raise ValueError(f"Unsupported pruners: {sorted(unsupported_pruners)}")
 
-    if experiment.imported_trial is not None:
+    if experiment.imported_trials:
         if experiment.arch_rows is None or len(experiment.arch_rows) != 1:
-            raise ValueError("An imported trial requires exactly one architecture row")
+            raise ValueError("Imported trials require exactly one architecture row")
         if len(optuna.samplers) != 1 or len(optuna.pruners) != 1:
-            raise ValueError("An imported trial requires exactly one sampler and pruner")
+            raise ValueError("Imported trials require exactly one sampler and pruner")
+        if len(experiment.imported_trials) > optuna.n_trials:
+            raise ValueError("Imported trials cannot exceed n_trials")
 
     resource_pruners = {"successive_halving", "hyperband"}
     if (
@@ -122,10 +126,7 @@ def validate_experiment(experiment: HPOExperimentConfig) -> None:
     search = experiment.search_space
     if search.lr[0] <= 0 or search.lr[1] <= search.lr[0]:
         raise ValueError("lr bounds must be positive and increasing")
-    if (
-        search.weight_decay[0] <= 0
-        or search.weight_decay[1] <= search.weight_decay[0]
-    ):
+    if search.weight_decay[0] <= 0 or search.weight_decay[1] <= search.weight_decay[0]:
         raise ValueError("weight_decay bounds must be positive and increasing")
     if not search.lr[0] <= search.initial_lr <= search.lr[1]:
         raise ValueError("initial_lr must be within lr bounds")
@@ -133,6 +134,15 @@ def validate_experiment(experiment: HPOExperimentConfig) -> None:
         search.weight_decay[0] <= search.initial_weight_decay <= search.weight_decay[1]
     ):
         raise ValueError("initial_weight_decay must be within weight_decay bounds")
+    for imported in experiment.imported_trials:
+        if not search.lr[0] <= imported.lr <= search.lr[1]:
+            raise ValueError("Imported trial lr must be within lr bounds")
+        if not (
+            search.weight_decay[0] <= imported.weight_decay <= search.weight_decay[1]
+        ):
+            raise ValueError(
+                "Imported trial weight_decay must be within weight_decay bounds"
+            )
     if "grid" not in optuna.samplers:
         return
 

@@ -1,18 +1,35 @@
 device: auto
 
-output_dir: outputs/hpo_8712_tpe_hyperband
+output_dir: outputs/hpo_8712_tpe_50
 checkpoint_dir: ${hpo.output_dir}/checkpoints
 log_dir: ${hpo.output_dir}/runs
 arch_rows:
   - 2
-num_processes: 2
+num_processes: 1
 gpu_ids:
   - 0
-  - 1
 
-imported_trial:
-  checkpoint_path: outputs/plain_pool_3_archs/checkpoints/arch_8712_initial.pt
-  metrics_path: outputs/plain_pool_3_archs/initial/arch_8712/checkpoints/arch_8712_initial/metrics.csv
+imported_trials:
+  - checkpoint_path: outputs/plain_pool_3_archs/checkpoints/arch_8712_initial.pt
+    metrics_path: outputs/plain_pool_3_archs/initial/arch_8712/checkpoints/arch_8712_initial/metrics.csv
+    lr: 1.0e-1
+    weight_decay: 5.0e-4
+  - checkpoint_path: outputs/plain_pool_3_archs/checkpoints/arch_8712_sample_1.pt
+    metrics_path: outputs/plain_pool_3_archs/sample_1/arch_8712/checkpoints/arch_8712_sample_1/metrics.csv
+    lr: 1.1e-1
+    weight_decay: 4.5e-4
+  - checkpoint_path: outputs/plain_pool_3_archs/checkpoints/arch_8712_sample_2.pt
+    metrics_path: outputs/plain_pool_3_archs/sample_2/arch_8712/checkpoints/arch_8712_sample_2/metrics.csv
+    lr: 9.0e-2
+    weight_decay: 5.5e-4
+  - checkpoint_path: outputs/plain_pool_3_archs/checkpoints/arch_8712_sample_3.pt
+    metrics_path: outputs/plain_pool_3_archs/sample_3/arch_8712/checkpoints/arch_8712_sample_3/metrics.csv
+    lr: 1.1e-1
+    weight_decay: 5.5e-4
+  - checkpoint_path: outputs/plain_pool_3_archs/checkpoints/arch_8712_sample_4.pt
+    metrics_path: outputs/plain_pool_3_archs/sample_4/arch_8712/checkpoints/arch_8712_sample_4/metrics.csv
+    lr: 9.0e-2
+    weight_decay: 4.5e-4
 
 search_space:
   lr:
@@ -33,13 +50,13 @@ search_space:
     - 5.5e-4
 
 optuna:
-  n_trials: 20
+  n_trials: 50
   max_epochs: 200
   samplers:
     - tpe
   pruners:
-    - hyperband
-  startup_trials: 2
+    - none
+  startup_trials: 5
   min_resource: 10
   reduction_factor: 3
   fixed_trial_seed: true

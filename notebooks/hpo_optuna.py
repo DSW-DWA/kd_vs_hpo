@@ -17,7 +17,6 @@ from kd_vs_hpo.hpo.config import (
 )
 from kd_vs_hpo.hpo.pipeline import run_hpo_experiment
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -89,15 +88,14 @@ def build_experiment(cfg: DictConfig) -> HPOExperimentConfig:
             else tuple(int(value) for value in hpo_cfg.gpu_ids)
         ),
         device=str(hpo_cfg.device),
-        imported_trial=(
-            None
-            if hpo_cfg.imported_trial is None
-            else ImportedTrialConfig(
-                checkpoint_path=project_path(
-                    str(hpo_cfg.imported_trial.checkpoint_path)
-                ),
-                metrics_path=project_path(str(hpo_cfg.imported_trial.metrics_path)),
+        imported_trials=tuple(
+            ImportedTrialConfig(
+                checkpoint_path=project_path(str(imported.checkpoint_path)),
+                metrics_path=project_path(str(imported.metrics_path)),
+                lr=float(imported.lr),
+                weight_decay=float(imported.weight_decay),
             )
+            for imported in hpo_cfg.imported_trials
         ),
     )
     validate_experiment(experiment)
