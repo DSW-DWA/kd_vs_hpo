@@ -23,7 +23,7 @@ HPO_CONFIG_PATH = PROJECT_ROOT / "conf/hpo/hpo_base.yaml"
 OUTPUT_DIR = PROJECT_ROOT / "outputs/plain_pool_3_archs"
 DATA_ROOT = PROJECT_ROOT / "data"
 
-NATS_INDICES = (8712, 11570, 1342)
+NATS_INDICES = (1342, 11570)
 SEED = 42
 EPOCHS = 200
 
