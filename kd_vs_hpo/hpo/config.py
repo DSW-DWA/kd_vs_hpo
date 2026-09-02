@@ -52,6 +52,7 @@ class OptunaConfig:
 
 @dataclass(frozen=True)
 class ImportedTrialConfig:
+    arch_index: int
     checkpoint_path: Path
     metrics_path: Path
     lr: float
@@ -106,12 +107,18 @@ def validate_experiment(experiment: HPOExperimentConfig) -> None:
         raise ValueError(f"Unsupported pruners: {sorted(unsupported_pruners)}")
 
     if experiment.imported_trials:
-        if experiment.arch_rows is None or len(experiment.arch_rows) != 1:
-            raise ValueError("Imported trials require exactly one architecture row")
+        if experiment.arch_rows is None:
+            raise ValueError("Imported trials require selected architecture rows")
         if len(optuna.samplers) != 1 or len(optuna.pruners) != 1:
             raise ValueError("Imported trials require exactly one sampler and pruner")
-        if len(experiment.imported_trials) > optuna.n_trials:
-            raise ValueError("Imported trials cannot exceed n_trials")
+        for arch_index in {trial.arch_index for trial in experiment.imported_trials}:
+            imported_count = sum(
+                trial.arch_index == arch_index for trial in experiment.imported_trials
+            )
+            if imported_count > optuna.n_trials:
+                raise ValueError(
+                    "Imported trials per architecture cannot exceed n_trials"
+                )
 
     resource_pruners = {"successive_halving", "hyperband"}
     if (

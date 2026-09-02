@@ -1,33 +1,90 @@
 device: auto
 
-output_dir: outputs/hpo_8712_tpe_50
+output_dir: outputs/hpo_11570_1342_tpe_50
 checkpoint_dir: ${hpo.output_dir}/checkpoints
 log_dir: ${hpo.output_dir}/runs
 arch_rows:
-  - 2
+  # 1 = 11570, 2 = 8712, 6 = 1342
+  - 1
+  - 6
 num_processes: 1
 gpu_ids:
   - 0
 
 imported_trials:
-  - checkpoint_path: outputs/plain_pool_3_archs/checkpoints/arch_8712_initial.pt
+  - arch_index: 11570
+    checkpoint_path: outputs/plain_pool_3_archs/checkpoints/arch_11570_initial.pt
+    metrics_path: outputs/plain_pool_3_archs/initial/arch_11570/checkpoints/arch_11570_initial/metrics.csv
+    lr: 1.0e-1
+    weight_decay: 5.0e-4
+  - arch_index: 11570
+    checkpoint_path: outputs/plain_pool_3_archs/checkpoints/arch_11570_sample_1.pt
+    metrics_path: outputs/plain_pool_3_archs/sample_1/arch_11570/checkpoints/arch_11570_sample_1/metrics.csv
+    lr: 1.1e-1
+    weight_decay: 4.5e-4
+  - arch_index: 11570
+    checkpoint_path: outputs/plain_pool_3_archs/checkpoints/arch_11570_sample_2.pt
+    metrics_path: outputs/plain_pool_3_archs/sample_2/arch_11570/checkpoints/arch_11570_sample_2/metrics.csv
+    lr: 9.0e-2
+    weight_decay: 5.5e-4
+  - arch_index: 11570
+    checkpoint_path: outputs/plain_pool_3_archs/checkpoints/arch_11570_sample_3.pt
+    metrics_path: outputs/plain_pool_3_archs/sample_3/arch_11570/checkpoints/arch_11570_sample_3/metrics.csv
+    lr: 1.1e-1
+    weight_decay: 5.5e-4
+  - arch_index: 11570
+    checkpoint_path: outputs/plain_pool_3_archs/checkpoints/arch_11570_sample_4.pt
+    metrics_path: outputs/plain_pool_3_archs/sample_4/arch_11570/checkpoints/arch_11570_sample_4/metrics.csv
+    lr: 9.0e-2
+    weight_decay: 4.5e-4
+  - arch_index: 8712
+    checkpoint_path: outputs/plain_pool_3_archs/checkpoints/arch_8712_initial.pt
     metrics_path: outputs/plain_pool_3_archs/initial/arch_8712/checkpoints/arch_8712_initial/metrics.csv
     lr: 1.0e-1
     weight_decay: 5.0e-4
-  - checkpoint_path: outputs/plain_pool_3_archs/checkpoints/arch_8712_sample_1.pt
+  - arch_index: 8712
+    checkpoint_path: outputs/plain_pool_3_archs/checkpoints/arch_8712_sample_1.pt
     metrics_path: outputs/plain_pool_3_archs/sample_1/arch_8712/checkpoints/arch_8712_sample_1/metrics.csv
     lr: 1.1e-1
     weight_decay: 4.5e-4
-  - checkpoint_path: outputs/plain_pool_3_archs/checkpoints/arch_8712_sample_2.pt
+  - arch_index: 8712
+    checkpoint_path: outputs/plain_pool_3_archs/checkpoints/arch_8712_sample_2.pt
     metrics_path: outputs/plain_pool_3_archs/sample_2/arch_8712/checkpoints/arch_8712_sample_2/metrics.csv
     lr: 9.0e-2
     weight_decay: 5.5e-4
-  - checkpoint_path: outputs/plain_pool_3_archs/checkpoints/arch_8712_sample_3.pt
+  - arch_index: 8712
+    checkpoint_path: outputs/plain_pool_3_archs/checkpoints/arch_8712_sample_3.pt
     metrics_path: outputs/plain_pool_3_archs/sample_3/arch_8712/checkpoints/arch_8712_sample_3/metrics.csv
     lr: 1.1e-1
     weight_decay: 5.5e-4
-  - checkpoint_path: outputs/plain_pool_3_archs/checkpoints/arch_8712_sample_4.pt
+  - arch_index: 8712
+    checkpoint_path: outputs/plain_pool_3_archs/checkpoints/arch_8712_sample_4.pt
     metrics_path: outputs/plain_pool_3_archs/sample_4/arch_8712/checkpoints/arch_8712_sample_4/metrics.csv
+    lr: 9.0e-2
+    weight_decay: 4.5e-4
+  - arch_index: 1342
+    checkpoint_path: outputs/plain_pool_3_archs/checkpoints/arch_1342_initial.pt
+    metrics_path: outputs/plain_pool_3_archs/initial/arch_1342/checkpoints/arch_1342_initial/metrics.csv
+    lr: 1.0e-1
+    weight_decay: 5.0e-4
+  - arch_index: 1342
+    checkpoint_path: outputs/plain_pool_3_archs/checkpoints/arch_1342_sample_1.pt
+    metrics_path: outputs/plain_pool_3_archs/sample_1/arch_1342/checkpoints/arch_1342_sample_1/metrics.csv
+    lr: 1.1e-1
+    weight_decay: 4.5e-4
+  - arch_index: 1342
+    checkpoint_path: outputs/plain_pool_3_archs/checkpoints/arch_1342_sample_2.pt
+    metrics_path: outputs/plain_pool_3_archs/sample_2/arch_1342/checkpoints/arch_1342_sample_2/metrics.csv
+    lr: 9.0e-2
+    weight_decay: 5.5e-4
+  - arch_index: 1342
+    checkpoint_path: outputs/plain_pool_3_archs/checkpoints/arch_1342_sample_3.pt
+    metrics_path: outputs/plain_pool_3_archs/sample_3/arch_1342/checkpoints/arch_1342_sample_3/metrics.csv
+    lr: 1.1e-1
+    weight_decay: 5.5e-4
+  - arch_index: 1342
+    checkpoint_path: outputs/plain_pool_3_archs/checkpoints/arch_1342_sample_4.pt
+    metrics_path: outputs/plain_pool_3_archs/sample_4/arch_1342/checkpoints/arch_1342_sample_4/metrics.csv
     lr: 9.0e-2
     weight_decay: 4.5e-4
 

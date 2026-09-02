@@ -270,7 +270,11 @@ def import_trials(
     n_train: int,
     n_val: int,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    imported_trials = experiment.imported_trials
+    imported_trials = tuple(
+        trial
+        for trial in experiment.imported_trials
+        if trial.arch_index == architecture["arch_index"]
+    )
     if not imported_trials:
         raise ValueError("No imported trials are configured")
     for imported in imported_trials:
@@ -282,12 +286,6 @@ def import_trials(
             raise FileNotFoundError(
                 f"Imported metrics were not found: {imported.metrics_path}"
             )
-    if storage_path.exists():
-        raise FileExistsError(
-            f"Optuna journal already exists: {storage_path}. "
-            "Use a new output_dir for a new experiment."
-        )
-
     sampler_seed = (
         experiment.train.seed
         + architecture["arch_row"] * 100
@@ -302,6 +300,11 @@ def import_trials(
         experiment=experiment,
         storage_path=storage_path,
     )
+    if study.trials:
+        raise FileExistsError(
+            f"Optuna study already exists: {study_name}. "
+            "Use a new output_dir for a new experiment."
+        )
     records: list[dict[str, Any]] = []
     epoch_records: list[dict[str, Any]] = []
     for trial_id, imported in enumerate(imported_trials):

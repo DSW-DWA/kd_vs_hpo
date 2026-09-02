@@ -165,14 +165,18 @@ def run_study_tasks(
     trial_records: list[dict[str, Any]] = []
     epoch_records: list[dict[str, Any]] = []
 
-    if len(tasks) == 1 and tasks[0].experiment.imported_trials:
-        return _run_imported_study(
-            tasks[0],
-            worker_devices,
-            local_loaders=local_loaders,
-            n_train=n_train,
-            n_val=n_val,
-        )
+    if tasks and tasks[0].experiment.imported_trials:
+        for task in tasks:
+            trials, epochs = _run_imported_study(
+                task,
+                worker_devices,
+                local_loaders=local_loaders,
+                n_train=n_train,
+                n_val=n_val,
+            )
+            trial_records.extend(trials)
+            epoch_records.extend(epochs)
+        return trial_records, epoch_records
 
     if len(worker_devices) == 1:
         for task in tasks:

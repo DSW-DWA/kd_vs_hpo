@@ -90,6 +90,7 @@ def build_experiment(cfg: DictConfig) -> HPOExperimentConfig:
         device=str(hpo_cfg.device),
         imported_trials=tuple(
             ImportedTrialConfig(
+                arch_index=int(imported.arch_index),
                 checkpoint_path=project_path(str(imported.checkpoint_path)),
                 metrics_path=project_path(str(imported.metrics_path)),
                 lr=float(imported.lr),
