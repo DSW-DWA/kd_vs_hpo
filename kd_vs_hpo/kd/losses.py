@@ -33,9 +33,9 @@ class KullbackLeiblerKDLoss(AbstractKDLoss):
         student_logits,
         teacher_logits,
     ):
-        
         student_log_probs = F.log_softmax(student_logits / self.temperature, dim=-1)
-        return F.kl_div(student_log_probs, teacher_logits, reduction="batchmean") * (self.temperature ** 2)
+        teacher_probs = F.softmax(teacher_logits / self.temperature, dim=-1)
+        return F.kl_div(student_log_probs, teacher_probs, reduction="batchmean") * (self.temperature ** 2)
 
 
 class MSELogitKDLoss(AbstractKDLoss):

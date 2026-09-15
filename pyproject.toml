@@ -26,6 +26,8 @@ dependencies = [
     "torchvision==0.21.0",
     "transformers>=5.10.2",
     "nats-bench>=1.8",
+    "tabulate>=0.10.0",
+    "hydra-joblib-launcher>=1.2.0",
 ]
 
 [tool.setuptools.packages.find]

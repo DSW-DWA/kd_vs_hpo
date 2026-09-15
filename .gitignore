@@ -18,3 +18,4 @@ checkpoints/
 logs/
 multirun/
 outputs/
+.ipynb_checkpoints/

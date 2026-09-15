@@ -2,6 +2,8 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from kd_vs_hpo.common.utils import extract_logits
+
 
 class TeacherEnsemble(nn.Module):
 
