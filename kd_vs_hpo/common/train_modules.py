@@ -6,6 +6,7 @@ from lightning.pytorch.callbacks import (
     EarlyStopping,
     LearningRateMonitor,
     ModelCheckpoint,
+    ModelSummary,
 )
 from lightning.pytorch.loggers import TensorBoardLogger
 from torch import nn
@@ -50,7 +51,7 @@ class KDLightningModule(L.LightningModule):
         flops_tracker: FlopsBudgetTracker | None = None,
     ):
         super().__init__()
-        # self.save_hyperparameters()
+        self.save_hyperparameters()
 
         self.model = model
         self.criterion = criterion
@@ -153,6 +154,10 @@ class KDLightningModule(L.LightningModule):
         self.log("test_acc", self.test_acc, on_epoch=True, on_step=False)
 
 
+    def on_train_start(self):
+        self.model.train()
+        self.teacher_ensemble.freeze()
+
     def on_train_epoch_start(self):
         self.train_epoch_flops = 0
 
@@ -196,16 +201,11 @@ def build_trainer(
         MetricsHistoryCallback(
             save_dir=resolve_dir(f"{checkpoint_dir}/{run_name}"),
         ),
-        # EarlyStopping(
-        #     monitor="val_loss",
-        #     patience=25,
-        #     mode="min"
-        #     ),
-        # StopAfterEpochCallback(10)
+        ModelSummary(max_depth=0),
     ]
     trainer = Trainer(
         max_epochs=max_epochs,
-        accelerator="auto",
+        accelerator="gpu",
         precision=("16-mixed" if amp else "32"
         ),
         deterministic=deterministic,

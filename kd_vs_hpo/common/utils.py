@@ -4,9 +4,12 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import pandas as pd
 import torch
 from xautodl.models import get_cell_based_tiny_net
 from datetime import datetime
+
+from kd_vs_hpo.common.nats import create_nats_model
 
 
 def set_seed(seed: int, deterministic: bool = True) -> None:
@@ -51,16 +54,8 @@ def stage_checkpoint_path(checkpoint_dir: Path, arch_row: int, trial_id: int, ta
     return checkpoint_dir / f"arch_{arch_row:02d}_trial_{trial_id:02d}_epoch_{target_epochs:04d}.pt"
 
 
-def get_model_by_idx(idx, architectures):
-    arch = next((a for a in architectures if a['arch_index'] == idx), None)
-    if arch is None:
-        raise ValueError(f"Architecture with index {idx} not found.")
-
-    model = get_cell_based_tiny_net(arch)
-    checkpoint = torch.load(f'checkpoints/baseline_200ep/arch_{idx}_trial_00_epoch_0200.pt', weights_only=False)
-    model.load_state_dict(checkpoint['model'])
-    return model
-
+def get_arch_by_idx(idx, architectures):
+    return next((a for a in architectures if a['arch_index'] == idx), None)
 
 def get_architectures_from_json(arch_file: str):
     with open(arch_file, 'r') as f:
@@ -76,3 +71,37 @@ def resolve_dir(path: str):
     if _path.exists():
         return str(_path.parent / (_path.name + '_' + get_datetime()))
     return path
+
+def load_checkpoint(path, architecture):
+    checkpoint = torch.load(
+            path,
+            map_location="cpu",
+            weights_only=True,
+        )
+    if "model" in checkpoint:
+        state = checkpoint["model"]
+        prefix = ""
+    else:
+        state = checkpoint["state_dict"]
+        prefix = "model."
+    model_state = {
+        name.removeprefix(prefix): value.detach().cpu()
+        for name, value in state.items()
+        if name.startswith(prefix)
+    }
+    model = create_nats_model(architecture)
+    model.load_state_dict(model_state, strict=True)
+    return model
+
+def load_checkpoint_by_idx(idx: int, chpt_path: str, architectures_path: str):
+    architectures = get_architectures_from_json(architectures_path)
+    arch = get_arch_by_idx(idx, architectures)
+    return load_checkpoint(chpt_path, arch)
+
+def get_log_data(path: str) -> pd.DataFrame:
+    x = pd.read_csv(path)
+    return x.groupby("epoch", sort=False).last().reset_index()
+
+def get_log_data(path: str) -> pd.DataFrame:
+    x = pd.read_csv(path)
+    return x.groupby("epoch", sort=False).last().reset_index()

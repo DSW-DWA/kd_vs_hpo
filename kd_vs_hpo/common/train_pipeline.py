@@ -12,7 +12,7 @@ from xautodl.models import get_cell_based_tiny_net
 from kd_vs_hpo.common.dataloader import build_cifar10_dataloaders
 from kd_vs_hpo.common.flops import FlopsBudgetTracker, count_flops_params
 from kd_vs_hpo.common.train_modules import KDLightningModule, build_trainer
-from kd_vs_hpo.common.utils import get_architectures_from_json
+from kd_vs_hpo.common.utils import get_architectures_from_json, load_checkpoint
 from kd_vs_hpo.kd.teacher import TeacherEnsemble
 
 logger = logging.getLogger(__name__)
@@ -35,12 +35,9 @@ def get_teachers_from_config(cfg: DictConfig, architectures):
     arches = []
     if cfg.teachers_mapping is None:
         return None, arches
-    for idx, path in cfg.teachers_mapping:
-        arch = next((a for a in architectures if a['arch_index'] == idx), None)
-        model = get_cell_based_tiny_net(arch)
-        checkpoint = torch.load(path, weights_only=False)
-        model.load_state_dict(checkpoint['model'])
-        models.append(model)
+    for mapping in cfg.teachers_mapping:
+        arch = next((a for a in architectures if a['arch_index'] == mapping.idx), None)
+        models.append(load_checkpoint(mapping.path, arch))
         arches.append(arch)
     return TeacherEnsemble(models), arches
 
@@ -130,7 +127,11 @@ def main(cfg: DictConfig):
 
     teacher_ensemble, teacher_arches = get_teachers_from_config(kd_cfg, architectires)
 
+    kd_loss = hydra.utils.instantiate(kd_cfg.kd_loss)
+
     run_name = kd_cfg.run_name + f"arch_{student_arch['arch_index']}_teachers_{'_'.join(str(t['arch_index']) for t in teacher_arches)}_seed_{general_cfg.seed}"
+    if kd_cfg.kd_loss is not None:
+        run_name += f"_{kd_loss.__class__.__name__}"
 
     student_flops, _ = count_flops_params(model)
     teacher_flops = sum(
@@ -161,7 +162,7 @@ def main(cfg: DictConfig):
         device=torch.device('cuda' if torch.cuda.is_available() else 'cpu'),
         scheduler_kwargs=kd_cfg.scheduler_params,
         teacher_ensemble=teacher_ensemble,
-        kd_loss=kd_cfg.kd_loss,
+        kd_loss=kd_loss,
         flops_tracker=FlopsBudgetTracker(kd_cfg.flops_budget, kd_cfg.flops_counter_mode),
         num_classes=10,
     )
