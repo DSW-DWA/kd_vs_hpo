@@ -8,6 +8,7 @@ wheels/
 
 # Virtual environments
 .venv*/
+launch.json
 
 # Experiment outputs
 data/
