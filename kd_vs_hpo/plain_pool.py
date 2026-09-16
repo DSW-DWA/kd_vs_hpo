@@ -62,16 +62,18 @@ def _train_one(
     lr: float,
     weight_decay: float,
     device: torch.device,
+    *,
+    output_dir: Path = OUTPUT_DIR,
 ) -> Path:
     arch_index = int(architecture["arch_index"])
-    run_root = OUTPUT_DIR / label / f"arch_{arch_index}"
+    run_root = output_dir / label / f"arch_{arch_index}"
     config = TrainConfig(
         seed=SEED,
         data_root=DATA_ROOT,
         checkpoint_dir=run_root / "checkpoints",
         log_dir=run_root / "logs",
     )
-    target = OUTPUT_DIR / "checkpoints" / f"arch_{arch_index}_{label}.pt"
+    target = output_dir / "checkpoints" / f"arch_{arch_index}_{label}.pt"
 
     seed_everything(SEED)
     model = create_nats_model(architecture)
