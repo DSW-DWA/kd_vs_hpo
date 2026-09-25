@@ -18,3 +18,9 @@ checkpoints/
 logs/
 multirun/
 outputs/
+
+*.tar.gz
+hpo_8712_repeat_1
+hpo_8712_repeat_2
+hpo_8712_tpe_50
+hpo_11570_1342_tpe_50
