@@ -6,11 +6,14 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import torch
-from xautodl.models import get_cell_based_tiny_net
+
 from datetime import datetime
 
 from kd_vs_hpo.common.nats import create_nats_model
 
+
+
+DEFAULT_CONFIG_PATH = str(Path(__file__).resolve().parents[2] / "conf")
 
 def set_seed(seed: int, deterministic: bool = True) -> None:
     random.seed(seed)
@@ -72,36 +75,64 @@ def resolve_dir(path: str):
         return str(_path.parent / (_path.name + '_' + get_datetime()))
     return path
 
-def load_checkpoint(path, architecture):
-    checkpoint = torch.load(
-            path,
-            map_location="cpu",
-            weights_only=True,
+def load_checkpoint(
+    path,
+    architecture,
+    criterion=None,
+    optimizer_cls=None,
+    optimizer_kwargs=None,
+    train_step_flops=0,
+    eval_step_flops=0,
+    num_classes=None,
+    scheduler_cls=None,
+    scheduler_kwargs=None,
+    teacher_ensemble=None,
+    kd_loss=None,
+    flops_tracker=None,
+):
+    from kd_vs_hpo.common.train_modules import KDLightningModule
+
+    try:
+        return KDLightningModule.load_from_checkpoint(path, weights_only=False)
+    except (TypeError, KeyError):
+        checkpoint = torch.load(
+                path,
+                map_location="cpu",
+                weights_only=False,
+            )
+        if "model" in checkpoint:
+            state = checkpoint["model"]
+            prefix = ""
+        elif "state_dict" in checkpoint:
+            state = checkpoint["state_dict"]
+            prefix = "model."
+        else:
+            raise ValueError(
+                f"Checkpoint {path!r} contains neither 'model' nor 'state_dict'"
+            )
+        model_state = {
+            name.removeprefix(prefix): value.detach().cpu()
+            for name, value in state.items()
+            if name.startswith(prefix)
+        }
+        model = create_nats_model(architecture)
+        model.load_state_dict(model_state, strict=True)
+        return KDLightningModule(
+            model=model,
+            criterion=criterion,
+            optimizer_cls=optimizer_cls,
+            optimizer_kwargs=optimizer_kwargs if optimizer_kwargs is not None else {},
+            train_step_flops=train_step_flops,
+            eval_step_flops=eval_step_flops,
+            num_classes=(
+                num_classes
+                if num_classes is not None
+                else int(architecture.get("num_classes", 10))
+            ),
+            scheduler_cls=scheduler_cls,
+            scheduler_kwargs=scheduler_kwargs,
+            teacher_ensemble=teacher_ensemble,
+            kd_loss=kd_loss,
+            flops_tracker=flops_tracker,
+
         )
-    if "model" in checkpoint:
-        state = checkpoint["model"]
-        prefix = ""
-    else:
-        state = checkpoint["state_dict"]
-        prefix = "model."
-    model_state = {
-        name.removeprefix(prefix): value.detach().cpu()
-        for name, value in state.items()
-        if name.startswith(prefix)
-    }
-    model = create_nats_model(architecture)
-    model.load_state_dict(model_state, strict=True)
-    return model
-
-def load_checkpoint_by_idx(idx: int, chpt_path: str, architectures_path: str):
-    architectures = get_architectures_from_json(architectures_path)
-    arch = get_arch_by_idx(idx, architectures)
-    return load_checkpoint(chpt_path, arch)
-
-def get_log_data(path: str) -> pd.DataFrame:
-    x = pd.read_csv(path)
-    return x.groupby("epoch", sort=False).last().reset_index()
-
-def get_log_data(path: str) -> pd.DataFrame:
-    x = pd.read_csv(path)
-    return x.groupby("epoch", sort=False).last().reset_index()
