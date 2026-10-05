@@ -42,7 +42,6 @@ def get_teachers_from_config(cfg: DictConfig, architectures):
     return TeacherEnsemble(models), arches
 
 
-
 def run_training_pipeline(
         model: nn.Module,
         criterion: nn.Module,
@@ -69,6 +68,7 @@ def run_training_pipeline(
         kd_loss: nn.Module | None = None,
         flops_tracker: FlopsBudgetTracker | None = None,
         num_classes: int = 10,
+        config: DictConfig | None = None,
 ):  
 
     train_loader, val_loader, test_loader, *_ = build_cifar10_dataloaders(
@@ -98,6 +98,7 @@ def run_training_pipeline(
         deterministic,
         amp,
         grad_clip_norm,
+        config=config,
     )
     trainer.fit(module, train_loader, val_loader)
     trainer.test(module, test_loader)
@@ -127,7 +128,7 @@ def main(cfg: DictConfig):
 
     teacher_ensemble, teacher_arches = get_teachers_from_config(kd_cfg, architectires)
 
-    kd_loss = hydra.utils.instantiate(kd_cfg.kd_loss)
+    kd_loss = None if kd_cfg.kd_loss is None else hydra.utils.instantiate(kd_cfg.kd_loss)
 
     run_name = kd_cfg.run_name + f"arch_{student_arch['arch_index']}_teachers_{'_'.join(str(t['arch_index']) for t in teacher_arches)}_seed_{general_cfg.seed}"
     if kd_cfg.kd_loss is not None:
@@ -165,6 +166,7 @@ def main(cfg: DictConfig):
         kd_loss=kd_loss,
         flops_tracker=FlopsBudgetTracker(kd_cfg.flops_budget, kd_cfg.flops_counter_mode),
         num_classes=10,
+        config=cfg,
     )
 
 

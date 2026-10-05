@@ -28,6 +28,7 @@ dependencies = [
     "nats-bench>=1.8",
     "tabulate>=0.10.0",
     "hydra-joblib-launcher>=1.2.0",
+    "archai>=1.0.0",
 ]
 
 [tool.setuptools.packages.find]

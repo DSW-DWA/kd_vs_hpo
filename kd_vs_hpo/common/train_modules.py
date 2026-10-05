@@ -9,6 +9,7 @@ from lightning.pytorch.callbacks import (
     ModelSummary,
 )
 from lightning.pytorch.loggers import TensorBoardLogger
+from omegaconf import DictConfig
 from torch import nn
 
 from kd_vs_hpo.common.flops import FlopsBudgetTracker
@@ -156,7 +157,8 @@ class KDLightningModule(L.LightningModule):
 
     def on_train_start(self):
         self.model.train()
-        self.teacher_ensemble.freeze()
+        if self.teacher_ensemble is not None:
+            self.teacher_ensemble.freeze()
 
     def on_train_epoch_start(self):
         self.train_epoch_flops = 0
@@ -188,6 +190,7 @@ def build_trainer(
         deterministic: bool,
         amp: bool,
         grad_clip_norm: float,
+        config: DictConfig | None = None,
         ):
     callbacks = [
         LearningRateMonitor(),
@@ -200,8 +203,10 @@ def build_trainer(
         ),
         MetricsHistoryCallback(
             save_dir=resolve_dir(f"{checkpoint_dir}/{run_name}"),
+            config=config,
         ),
         ModelSummary(max_depth=0),
+        # StopAfterEpochCallback(10)
     ]
     trainer = Trainer(
         max_epochs=max_epochs,
