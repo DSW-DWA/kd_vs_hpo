@@ -18,4 +18,4 @@ teachers_mapping: null
 kd_loss: 
   _target_: kd_vs_hpo.kd.losses.KullbackLeiblerKDLoss
   alpha: 0.5
-  temperature: 4
+  temperature: 1
