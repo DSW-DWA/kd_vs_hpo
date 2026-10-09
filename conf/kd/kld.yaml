@@ -1,0 +1,21 @@
+checkpoint_dir: checkpoints/test_logs
+log_dir: logs/test_logs
+
+flops_counter_mode: SILENT
+flops_budget: 1.0e40
+run_name: ""
+
+optimizer_params:
+  lr: 0.1
+  momentum: ${general.momentum}
+  weight_decay: 5e-4
+
+scheduler_params:
+  T_max: ${general.max_epochs}
+
+student: null
+teachers_mapping: null
+kd_loss: 
+  _target_: kd_vs_hpo.kd.losses.KullbackLeiblerKDLoss
+  alpha: 0.5
+  temperature: 1

@@ -4,10 +4,16 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import pandas as pd
 import torch
-from xautodl.models import get_cell_based_tiny_net
+
 from datetime import datetime
 
+from kd_vs_hpo.common.nats import create_nats_model
+
+
+
+DEFAULT_CONFIG_PATH = str(Path(__file__).resolve().parents[2] / "conf")
 
 def set_seed(seed: int, deterministic: bool = True) -> None:
     random.seed(seed)
@@ -51,16 +57,8 @@ def stage_checkpoint_path(checkpoint_dir: Path, arch_row: int, trial_id: int, ta
     return checkpoint_dir / f"arch_{arch_row:02d}_trial_{trial_id:02d}_epoch_{target_epochs:04d}.pt"
 
 
-def get_model_by_idx(idx, architectures):
-    arch = next((a for a in architectures if a['arch_index'] == idx), None)
-    if arch is None:
-        raise ValueError(f"Architecture with index {idx} not found.")
-
-    model = get_cell_based_tiny_net(arch)
-    checkpoint = torch.load(f'checkpoints/baseline_200ep/arch_{idx}_trial_00_epoch_0200.pt', weights_only=False)
-    model.load_state_dict(checkpoint['model'])
-    return model
-
+def get_arch_by_idx(idx, architectures):
+    return next((a for a in architectures if a['arch_index'] == idx), None)
 
 def get_architectures_from_json(arch_file: str):
     with open(arch_file, 'r') as f:
@@ -76,3 +74,66 @@ def resolve_dir(path: str):
     if _path.exists():
         return str(_path.parent / (_path.name + '_' + get_datetime()))
     return path
+
+
+def load_checkpoint(
+    path,
+    architecture,
+    criterion=None,
+    optimizer_cls=None,
+    optimizer_kwargs=None,
+    train_step_flops=0,
+    eval_step_flops=0,
+    num_classes=None,
+    scheduler_cls=None,
+    scheduler_kwargs=None,
+    teacher_ensemble=None,
+    kd_loss=None,
+    flops_tracker=None,
+):
+    from kd_vs_hpo.common.train_modules import KDLightningModule
+
+    try:
+        return KDLightningModule.load_from_checkpoint(path, weights_only=False)
+    except (TypeError, KeyError):
+        checkpoint = torch.load(
+                path,
+                map_location="cpu",
+                weights_only=False,
+            )
+        if "model" in checkpoint:
+            state = checkpoint["model"]
+            prefix = ""
+        elif "state_dict" in checkpoint:
+            state = checkpoint["state_dict"]
+            prefix = "model."
+        else:
+            raise ValueError(
+                f"Checkpoint {path!r} contains neither 'model' nor 'state_dict'"
+            )
+        model_state = {
+            name.removeprefix(prefix): value.detach().cpu()
+            for name, value in state.items()
+            if name.startswith(prefix)
+        }
+        model = create_nats_model(architecture)
+        model.load_state_dict(model_state, strict=True)
+        return KDLightningModule(
+            model=model,
+            criterion=criterion,
+            optimizer_cls=optimizer_cls,
+            optimizer_kwargs=optimizer_kwargs if optimizer_kwargs is not None else {},
+            train_step_flops=train_step_flops,
+            eval_step_flops=eval_step_flops,
+            num_classes=(
+                num_classes
+                if num_classes is not None
+                else int(architecture.get("num_classes", 10))
+            ),
+            scheduler_cls=scheduler_cls,
+            scheduler_kwargs=scheduler_kwargs,
+            teacher_ensemble=teacher_ensemble,
+            kd_loss=kd_loss,
+            flops_tracker=flops_tracker,
+
+        )

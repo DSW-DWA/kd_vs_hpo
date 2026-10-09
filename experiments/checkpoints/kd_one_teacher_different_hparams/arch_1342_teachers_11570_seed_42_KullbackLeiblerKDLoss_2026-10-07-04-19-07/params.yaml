@@ -1,0 +1,73 @@
+general:
+  max_epochs: 200
+  batch_size: 256
+  num_workers: 2
+  validation_fraction: 0.1
+  momentum: 0.9
+  grad_clip_norm: 5.0
+  seed: 42
+  deterministic: true
+  amp: true
+  train_step_multiplier: 3.0
+  data_root: data
+  architectures_path: experiments/nats_architectures_7.json
+hpo:
+  device: auto
+  output_dir: hpo_output
+  checkpoint_dir: hpo_output/checkpoints
+  log_dir: hpo_output/runs
+  arch_rows:
+  - 0
+  num_processes: 1
+  gpu_ids: null
+  search_space:
+    lr:
+    - 0.045
+    - 0.055
+    weight_decay:
+    - 0.00045
+    - 0.00055
+    initial_lr: 0.05
+    initial_weight_decay: 0.0005
+    grid_lr:
+    - 0.045
+    - 0.05
+    - 0.055
+    grid_weight_decay:
+    - 0.00045
+    - 0.0005
+    - 0.00055
+  optuna:
+    n_trials: 20
+    max_epochs: 200
+    samplers:
+    - tpe
+    - grid
+    - cmaes
+    - gp
+    pruners:
+    - successive_halving
+    - hyperband
+    startup_trials: 5
+    min_resource: 10
+    reduction_factor: 3
+kd:
+  checkpoint_dir: checkpoints/kd_one_teacher_different_hparams
+  log_dir: logs/kd_one_teacher_different_hparams
+  flops_counter_mode: SILENT
+  flops_budget: 1.0e+40
+  run_name: ''
+  optimizer_params:
+    lr: 0.1
+    momentum: 0.9
+    weight_decay: 0.0005
+  scheduler_params:
+    T_max: 200
+  student: 1342
+  teachers_mapping:
+  - idx: 11570
+    path: /home/ivanov.timofey51/kd_vs_hpo/experiments/checkpoints/five_teachers/chosen_3/arch_11570_teachers__seed_42_mid/arch_11570_teachers__seed_42_KullbackLeiblerKDLossepoch=epoch=146-val_acc=val_acc=0.8924.ckpt
+  kd_loss:
+    _target_: kd_vs_hpo.kd.losses.KullbackLeiblerKDLoss
+    alpha: 0.5
+    temperature: 1.0
