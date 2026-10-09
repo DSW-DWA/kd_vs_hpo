@@ -1,5 +1,5 @@
-checkpoint_dir: checkpoints/kd_one_teacher_different_seeds
-log_dir: logs/kd_one_teacher_different_seeds
+checkpoint_dir: checkpoints/kd_two_teachers_different_hparams
+log_dir: logs/kd_two_teachers_different_hparams
 
 flops_counter_mode: SILENT
 flops_budget: 1.0e40
