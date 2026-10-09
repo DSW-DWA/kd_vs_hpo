@@ -75,6 +75,7 @@ def resolve_dir(path: str):
         return str(_path.parent / (_path.name + '_' + get_datetime()))
     return path
 
+
 def load_checkpoint(
     path,
     architecture,
