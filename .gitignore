@@ -8,6 +8,7 @@ wheels/
 
 # Virtual environments
 .venv*/
+launch.json
 
 # Experiment outputs
 data/
@@ -18,3 +19,4 @@ checkpoints/
 logs/
 multirun/
 outputs/
+.ipynb_checkpoints/
