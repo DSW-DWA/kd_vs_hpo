@@ -11,7 +11,11 @@ import torch
 from kd_vs_hpo.common.dataloader import build_cifar10_dataloaders
 from kd_vs_hpo.common.flops import CounterMode, FlopsBudgetTracker, count_flops_params
 from kd_vs_hpo.common.nats import create_nats_model
-from kd_vs_hpo.hpo.config import HPOExperimentConfig, validate_experiment
+from kd_vs_hpo.hpo.config import (
+    HPOExperimentConfig,
+    validate_experiment,
+    validate_imported_trial_files,
+)
 from kd_vs_hpo.hpo.persistence import save_result_tables, save_run_config
 from kd_vs_hpo.hpo.results import HPOExperimentResult, build_experiment_result
 from kd_vs_hpo.hpo.worker import (
@@ -25,6 +29,7 @@ def run_hpo_experiment(
     experiment: HPOExperimentConfig,
 ) -> HPOExperimentResult:
     validate_experiment(experiment)
+    validate_imported_trial_files(experiment)
     device = _resolve_device(experiment.device)
     experiment.output_dir.mkdir(parents=True, exist_ok=True)
     recovery_dir = experiment.output_dir / "recovery"

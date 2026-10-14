@@ -1,0 +1,55 @@
+defaults:
+  - hpo_base
+  - _self_
+
+# Five completed teacher runs, followed by 45 sequential TPE trials.
+# Search distributions are inherited from hpo_base.
+output_dir: outputs/hpo_1342_five_teachers_tpe_50
+arch_rows: [6]
+num_processes: 1
+
+optuna:
+  n_trials: 50
+  max_epochs: 200
+  samplers: [tpe]
+  pruners: [none]
+  startup_trials: 5
+  fixed_trial_seed: true
+  fresh_dataloaders_per_trial: true
+
+imported_trials:
+  - arch_index: 1342
+    checkpoint_path: experiments/checkpoints/five_teachers/arch_1342_teachers__seed_42_KullbackLeiblerKDLoss/arch_1342_teachers__seed_42_KullbackLeiblerKDLossepoch=epoch=176-val_acc=val_acc=0.4794.ckpt
+    metrics_path: experiments/checkpoints/five_teachers/arch_1342_teachers__seed_42_KullbackLeiblerKDLoss/metrics.csv
+    lr: 0.0004751836912519933
+    weight_decay: 0.0029334453957883953
+    momentum: 0.5387926357773329
+    batch_size: 384
+  - arch_index: 1342
+    checkpoint_path: experiments/checkpoints/five_teachers/arch_1342_teachers__seed_42_KullbackLeiblerKDLoss_2026-10-06-05-41-47/arch_1342_teachers__seed_42_KullbackLeiblerKDLossepoch=epoch=157-val_acc=val_acc=0.4842.ckpt
+    metrics_path: experiments/checkpoints/five_teachers/arch_1342_teachers__seed_42_KullbackLeiblerKDLoss_2026-10-06-05-41-47/metrics.csv
+    lr: 4.9947570810682895e-05
+    weight_decay: 5.407712220288117e-07
+    momentum: 0.7795585311974417
+    batch_size: 32
+  - arch_index: 1342
+    checkpoint_path: experiments/checkpoints/five_teachers/arch_1342_teachers__seed_42_KullbackLeiblerKDLoss_2026-10-06-07-16-49/arch_1342_teachers__seed_42_KullbackLeiblerKDLossepoch=epoch=198-val_acc=val_acc=0.7672.ckpt
+    metrics_path: experiments/checkpoints/five_teachers/arch_1342_teachers__seed_42_KullbackLeiblerKDLoss_2026-10-06-07-16-49/metrics.csv
+    lr: 0.004912072810282769
+    weight_decay: 0.00021242802137208872
+    momentum: 0.8729188669457949
+    batch_size: 16
+  - arch_index: 1342
+    checkpoint_path: experiments/checkpoints/five_teachers/arch_1342_teachers__seed_42_KullbackLeiblerKDLoss_2026-10-06-10-25-17/arch_1342_teachers__seed_42_KullbackLeiblerKDLossepoch=epoch=191-val_acc=val_acc=0.7250.ckpt
+    metrics_path: experiments/checkpoints/five_teachers/arch_1342_teachers__seed_42_KullbackLeiblerKDLoss_2026-10-06-10-25-17/metrics.csv
+    lr: 0.05332693713874534
+    weight_decay: 9.948901058090725e-07
+    momentum: 0.16506405886809045
+    batch_size: 96
+  - arch_index: 1342
+    checkpoint_path: experiments/checkpoints/five_teachers/arch_1342_teachers__seed_42_KullbackLeiblerKDLoss_2026-10-06-10-57-23/arch_1342_teachers__seed_42_KullbackLeiblerKDLossepoch=epoch=178-val_acc=val_acc=0.4314.ckpt
+    metrics_path: experiments/checkpoints/five_teachers/arch_1342_teachers__seed_42_KullbackLeiblerKDLoss_2026-10-06-10-57-23/metrics.csv
+    lr: 0.00023021277110080198
+    weight_decay: 2.9229052129200927e-05
+    momentum: 0.26210622617823776
+    batch_size: 224

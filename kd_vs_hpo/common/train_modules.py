@@ -191,6 +191,7 @@ def build_trainer(
         amp: bool,
         grad_clip_norm: float,
         config: DictConfig | None = None,
+        device: torch.device | None = None,
         ):
     callbacks = [
         LearningRateMonitor(),
@@ -208,9 +209,14 @@ def build_trainer(
         ModelSummary(max_depth=0),
         # StopAfterEpochCallback(10)
     ]
+    accelerator = "gpu" if device is None else device.type
+    devices = 1
+    if device is not None and device.type == "cuda":
+        accelerator = "gpu"
+        devices = [device.index if device.index is not None else 0]
     trainer = Trainer(
         max_epochs=max_epochs,
-        accelerator="gpu",
+        accelerator=accelerator,
         precision=("16-mixed" if amp else "32"
         ),
         deterministic=deterministic,
@@ -220,7 +226,7 @@ def build_trainer(
             save_dir=log_dir,
             name=run_name,
             ),
-        devices=1,
+        devices=devices,
         strategy="auto",
         accumulate_grad_batches=1,
     )

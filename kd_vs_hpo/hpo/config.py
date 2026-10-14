@@ -21,8 +21,14 @@ DEFAULT_PRUNERS: tuple[PrunerName, ...] = ("successive_halving", "hyperband")
 
 @dataclass(frozen=True)
 class SearchSpace:
-    lr: tuple[float, float] = (9.0e-2, 1.1e-1)
-    weight_decay: tuple[float, float] = (4.5e-4, 5.5e-4)
+    lr: tuple[float, float] = (1.0e-5, 3.0e-1)
+    weight_decay: tuple[float, float] = (1.0e-7, 5.0e-3)
+    batch_size: tuple[int, int] = (16, 512)
+    batch_size_step: int = 16
+    momentum: tuple[float, float] = (0.0, 0.9)
+    initial_batch_size: int = 256
+    initial_momentum: float = 0.9
+    grid_momentum: tuple[float, ...] = (0.0, 0.45, 0.9)
     initial_lr: float = 1.0e-1
     initial_weight_decay: float = 5.0e-4
     grid_lr: tuple[float, ...] = (
@@ -57,6 +63,8 @@ class ImportedTrialConfig:
     metrics_path: Path
     lr: float
     weight_decay: float
+    batch_size: int = 256
+    momentum: float = 0.9
 
 
 @dataclass(frozen=True)
@@ -71,6 +79,22 @@ class HPOExperimentConfig:
     gpu_ids: tuple[int, ...] | None = None
     device: DeviceName = "auto"
     imported_trials: tuple[ImportedTrialConfig, ...] = ()
+
+
+def validate_imported_trial_files(experiment: HPOExperimentConfig) -> None:
+    """Reject missing files and LFS pointers before datasets or training are loaded."""
+    for trial in experiment.imported_trials:
+        for path in (trial.checkpoint_path, trial.metrics_path):
+            if not path.is_file():
+                raise FileNotFoundError(f"Imported trial file was not found: {path}")
+            with path.open("rb") as file:
+                header = file.read(128)
+            if header.startswith(b"version https://git-lfs.github.com/spec/v1"):
+                raise ValueError(
+                    f"Imported trial file is a Git LFS pointer: {path}. "
+                    "Install Git LFS and run git lfs pull for the source files "
+                    "before starting the experiment."
+                )
 
 
 def validate_experiment(experiment: HPOExperimentConfig) -> None:
@@ -141,7 +165,25 @@ def validate_experiment(experiment: HPOExperimentConfig) -> None:
         search.weight_decay[0] <= search.initial_weight_decay <= search.weight_decay[1]
     ):
         raise ValueError("initial_weight_decay must be within weight_decay bounds")
+    if len(search.batch_size) != 2 or len(search.momentum) != 2:
+        raise ValueError("batch_size and momentum must each contain two bounds")
+    low, high = search.batch_size
+    if low < 1 or high < low or search.batch_size_step < 1:
+        raise ValueError("batch_size bounds and step must be positive and increasing")
+    if (high - low) % search.batch_size_step:
+        raise ValueError("batch_size upper bound must align with batch_size_step")
+    if not 0 <= search.momentum[0] < search.momentum[1] <= 1:
+        raise ValueError("momentum bounds must be increasing within [0, 1]")
+
+    def validate_extra_parameters(batch_size: int, momentum: float) -> None:
+        if not low <= batch_size <= high or (batch_size - low) % search.batch_size_step:
+            raise ValueError("batch_size must lie on the configured search steps")
+        if not search.momentum[0] <= momentum <= search.momentum[1]:
+            raise ValueError("momentum must be within search bounds")
+
+    validate_extra_parameters(search.initial_batch_size, search.initial_momentum)
     for imported in experiment.imported_trials:
+        validate_extra_parameters(imported.batch_size, imported.momentum)
         if not search.lr[0] <= imported.lr <= search.lr[1]:
             raise ValueError("Imported trial lr must be within lr bounds")
         if not (
@@ -171,7 +213,23 @@ def validate_experiment(experiment: HPOExperimentConfig) -> None:
     if search.initial_weight_decay not in search.grid_weight_decay:
         raise ValueError("initial_weight_decay must be present in grid_weight_decay")
 
-    grid_size = len(search.grid_lr) * len(search.grid_weight_decay)
+    if not search.grid_momentum or len(set(search.grid_momentum)) != len(
+        search.grid_momentum
+    ):
+        raise ValueError("grid_momentum must contain unique values")
+    if any(
+        not search.momentum[0] <= value <= search.momentum[1]
+        for value in search.grid_momentum
+    ):
+        raise ValueError("grid_momentum values must be within momentum bounds")
+    if search.initial_momentum not in search.grid_momentum:
+        raise ValueError("initial_momentum must be present in grid_momentum")
+    grid_size = (
+        len(search.grid_lr)
+        * len(search.grid_weight_decay)
+        * len(range(low, high + 1, search.batch_size_step))
+        * len(search.grid_momentum)
+    )
     if optuna.n_trials < grid_size:
         raise ValueError(
             f"n_trials must be at least {grid_size} when using GridSampler "

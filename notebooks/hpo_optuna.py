@@ -54,6 +54,14 @@ def build_experiment(cfg: DictConfig) -> HPOExperimentConfig:
                 hpo_cfg.search_space.weight_decay,
                 "weight_decay",
             ),
+            batch_size=tuple(int(value) for value in hpo_cfg.search_space.batch_size),
+            batch_size_step=int(hpo_cfg.search_space.batch_size_step),
+            momentum=_float_pair(hpo_cfg.search_space.momentum, "momentum"),
+            initial_batch_size=int(hpo_cfg.search_space.initial_batch_size),
+            initial_momentum=float(hpo_cfg.search_space.initial_momentum),
+            grid_momentum=tuple(
+                float(value) for value in hpo_cfg.search_space.grid_momentum
+            ),
             initial_lr=float(hpo_cfg.search_space.initial_lr),
             initial_weight_decay=float(hpo_cfg.search_space.initial_weight_decay),
             grid_lr=tuple(float(value) for value in hpo_cfg.search_space.grid_lr),
@@ -95,6 +103,8 @@ def build_experiment(cfg: DictConfig) -> HPOExperimentConfig:
                 metrics_path=project_path(str(imported.metrics_path)),
                 lr=float(imported.lr),
                 weight_decay=float(imported.weight_decay),
+                batch_size=int(imported.get("batch_size", general_cfg.batch_size)),
+                momentum=float(imported.get("momentum", general_cfg.momentum)),
             )
             for imported in hpo_cfg.imported_trials
         ),

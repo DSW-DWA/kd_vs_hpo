@@ -2,6 +2,7 @@ import csv
 import gc
 import time
 import warnings
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +21,7 @@ from kd_vs_hpo.hpo.config import (
     HPOExperimentConfig,
     PrunerName,
     SamplerName,
+    validate_imported_trial_files,
 )
 from kd_vs_hpo.hpo.persistence import save_study_progress
 from kd_vs_hpo.hpo.training import build_lightning_module, fit_lightning_trial
@@ -83,6 +85,15 @@ def run_study(
         weight_decay = trial.suggest_float(
             "weight_decay", *experiment.search_space.weight_decay, log=True
         )
+        batch_size = trial.suggest_int(
+            "batch_size",
+            *experiment.search_space.batch_size,
+            step=experiment.search_space.batch_size_step,
+        )
+        momentum = trial.suggest_float("momentum", *experiment.search_space.momentum)
+        trial_train_config = replace(
+            experiment.train, batch_size=batch_size, momentum=momentum
+        )
         trial_seed = (
             experiment.train.seed
             if experiment.optuna.fixed_trial_seed
@@ -93,20 +104,24 @@ def run_study(
         model = create_nats_model(architecture)
         objective_train_loader = train_loader
         objective_val_loader = val_loader
-        if experiment.optuna.fresh_dataloaders_per_trial:
+        rebuild_loaders = (
+            experiment.optuna.fresh_dataloaders_per_trial
+            or batch_size != train_loader.batch_size
+        )
+        if rebuild_loaders:
             objective_train_loader, objective_val_loader, _, *_ = (
                 build_cifar10_dataloaders(
                     experiment.train.checkpoint_dir,
                     experiment.train.log_dir,
                     experiment.train.data_root,
-                    trial_seed,
-                    experiment.train.batch_size,
+                    experiment.train.seed,
+                    batch_size,
                     experiment.train.num_workers,
                     experiment.train.validation_fraction,
                     device,
                 )
             )
-        elif objective_train_loader.generator is not None:
+        if objective_train_loader.generator is not None:
             objective_train_loader.generator.manual_seed(trial_seed)
         checkpoint = _checkpoint_path(experiment.output_dir, study_name, trial.number)
         flops_tracker = FlopsBudgetTracker(
@@ -117,7 +132,7 @@ def run_study(
         lightning_module = build_lightning_module(
             model=model,
             architecture=architecture,
-            train_config=experiment.train,
+            train_config=trial_train_config,
             lr=lr,
             weight_decay=weight_decay,
             max_epochs=experiment.optuna.max_epochs,
@@ -141,6 +156,8 @@ def run_study(
             "trial_seed": trial_seed,
             "lr": lr,
             "weight_decay": weight_decay,
+            "batch_size": batch_size,
+            "momentum": momentum,
         }
 
         try:
@@ -152,7 +169,7 @@ def run_study(
                 study_name=study_name,
                 checkpoint_path=checkpoint,
                 epoch_records=epoch_records,
-                train_config=experiment.train,
+                train_config=trial_train_config,
                 max_epochs=experiment.optuna.max_epochs,
                 device=device,
             )
@@ -244,7 +261,7 @@ def run_study(
                         stacklevel=2,
                     )
             del lightning_module, model
-            if experiment.optuna.fresh_dataloaders_per_trial:
+            if rebuild_loaders:
                 del objective_train_loader, objective_val_loader
             gc.collect()
             if device.type == "cuda":
@@ -277,15 +294,11 @@ def import_trials(
     )
     if not imported_trials:
         raise ValueError("No imported trials are configured")
-    for imported in imported_trials:
-        if not imported.checkpoint_path.is_file():
-            raise FileNotFoundError(
-                f"Imported checkpoint was not found: {imported.checkpoint_path}"
-            )
-        if not imported.metrics_path.is_file():
-            raise FileNotFoundError(
-                f"Imported metrics were not found: {imported.metrics_path}"
-            )
+    validate_imported_trial_files(experiment)
+    curves = [
+        _read_validation_curve(imported.metrics_path, "", trial_id)
+        for trial_id, imported in enumerate(imported_trials)
+    ]
     sampler_seed = (
         experiment.train.seed
         + architecture["arch_row"] * 100
@@ -308,8 +321,15 @@ def import_trials(
     records: list[dict[str, Any]] = []
     epoch_records: list[dict[str, Any]] = []
     for trial_id, imported in enumerate(imported_trials):
-        curve = _read_validation_curve(imported.metrics_path, study_name, trial_id)
-        parameters = {"lr": imported.lr, "weight_decay": imported.weight_decay}
+        curve = curves[trial_id]
+        for row in curve:
+            row["study_name"] = study_name
+        parameters = {
+            "lr": imported.lr,
+            "weight_decay": imported.weight_decay,
+            "batch_size": imported.batch_size,
+            "momentum": imported.momentum,
+        }
         study.enqueue_trial(
             parameters,
             user_attrs={
@@ -326,6 +346,12 @@ def import_trials(
             trial.suggest_float(
                 "weight_decay", *experiment.search_space.weight_decay, log=True
             )
+            trial.suggest_int(
+                "batch_size",
+                *experiment.search_space.batch_size,
+                step=experiment.search_space.batch_size_step,
+            )
+            trial.suggest_float("momentum", *experiment.search_space.momentum)
             for row in validation_curve:
                 trial.report(row["val_acc1"], step=row["epoch"])
                 if trial.should_prune():
@@ -366,6 +392,8 @@ def import_trials(
             "trial_seed": experiment.train.seed,
             "lr": parameters["lr"],
             "weight_decay": parameters["weight_decay"],
+            "batch_size": parameters["batch_size"],
+            "momentum": parameters["momentum"],
         }
         record = _trial_record(
             context=context,
@@ -460,6 +488,13 @@ def _save_imported_checkpoint(
 ) -> None:
     source = torch.load(source_path, map_location="cpu", weights_only=False)
     model_state = source.get("model")
+    if model_state is None:
+        lightning_state = source.get("state_dict", {})
+        model_state = {
+            name.removeprefix("model."): value
+            for name, value in lightning_state.items()
+            if name.startswith("model.")
+        }
     if not isinstance(model_state, dict) or not model_state:
         raise ValueError(f"Model weights were not found in {source_path}")
     model = create_nats_model(architecture)
@@ -496,6 +531,14 @@ def _create_sampler(
             {
                 "lr": experiment.search_space.grid_lr,
                 "weight_decay": experiment.search_space.grid_weight_decay,
+                "batch_size": tuple(
+                    range(
+                        experiment.search_space.batch_size[0],
+                        experiment.search_space.batch_size[1] + 1,
+                        experiment.search_space.batch_size_step,
+                    )
+                ),
+                "momentum": experiment.search_space.grid_momentum,
             },
             seed=seed,
         )
@@ -532,10 +575,14 @@ def _create_pruner(
     raise ValueError(f"Unsupported pruner: {name}")
 
 
-def _initial_trial_parameters(experiment: HPOExperimentConfig) -> dict[str, float]:
+def _initial_trial_parameters(
+    experiment: HPOExperimentConfig,
+) -> dict[str, float | int]:
     return {
         "lr": experiment.search_space.initial_lr,
         "weight_decay": experiment.search_space.initial_weight_decay,
+        "batch_size": experiment.search_space.initial_batch_size,
+        "momentum": experiment.search_space.initial_momentum,
     }
 
 

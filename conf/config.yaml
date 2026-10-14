@@ -1,5 +1,5 @@
 defaults:
   - _self_
   - general: general
-  - hpo: hpo_base
+  - hpo: hpo_1342_five_teachers_tpe_50
   - kd: kd_base
