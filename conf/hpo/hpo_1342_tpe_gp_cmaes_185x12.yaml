@@ -1,0 +1,19 @@
+defaults:
+  - hpo_base
+  - _self_
+
+# Three independent studies: 185 configurations per sampler, 12 epochs each.
+# CosineAnnealingLR also uses a 12-epoch schedule.
+output_dir: outputs/hpo_1342_tpe_gp_cmaes_185x12
+arch_rows: [6]
+num_processes: 1
+imported_trials: []
+
+optuna:
+  n_trials: 185
+  max_epochs: 12
+  samplers: [tpe, gp, cmaes]
+  pruners: [none]
+  startup_trials: 5
+  fixed_trial_seed: true
+  fresh_dataloaders_per_trial: true
