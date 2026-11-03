@@ -4,12 +4,12 @@ defaults:
 
 # Five completed teacher runs, followed by 20 sequential TPE trials.
 # Search distributions are inherited from hpo_base.
-output_dir: outputs/hpo_11570_five_teachers_tpe_25
+output_dir: outputs/hpo_11570_five_teachers_tpe_50
 arch_rows: [1]
 num_processes: 1
 
 optuna:
-  n_trials: 25
+  n_trials: 50
   max_epochs: 200
   samplers: [tpe]
   pruners: [none]
