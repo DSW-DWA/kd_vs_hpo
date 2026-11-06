@@ -79,6 +79,7 @@ class HPOExperimentConfig:
     gpu_ids: tuple[int, ...] | None = None
     device: DeviceName = "auto"
     imported_trials: tuple[ImportedTrialConfig, ...] = ()
+    label_noise: float = 0.0
 
 
 def validate_imported_trial_files(experiment: HPOExperimentConfig) -> None:
@@ -99,6 +100,8 @@ def validate_imported_trial_files(experiment: HPOExperimentConfig) -> None:
 
 def validate_experiment(experiment: HPOExperimentConfig) -> None:
     optuna = experiment.optuna
+    if not 0.0 <= experiment.label_noise <= 1.0:
+        raise ValueError("HPO label_noise must be in [0, 1]")
     if experiment.num_processes < 1:
         raise ValueError("num_processes must be positive")
     if experiment.device not in {"auto", "cpu", "cuda", "mps"}:

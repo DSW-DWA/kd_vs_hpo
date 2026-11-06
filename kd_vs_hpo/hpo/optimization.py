@@ -119,6 +119,7 @@ def run_study(
                     experiment.train.num_workers,
                     experiment.train.validation_fraction,
                     device,
+                    label_noise=experiment.label_noise,
                 )
             )
         if objective_train_loader.generator is not None:

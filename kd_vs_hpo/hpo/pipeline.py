@@ -52,6 +52,7 @@ def run_hpo_experiment(
             experiment.train.num_workers,
             experiment.train.validation_fraction,
             evaluation_device,
+            label_noise=experiment.label_noise,
         )
     )
     flops_tracker = FlopsBudgetTracker(

@@ -14,7 +14,7 @@ from kd_vs_hpo.hpo.optimization import import_trials, run_study
 
 WorkerLoaders = tuple[DataLoader, DataLoader, int, int]
 _worker_loaders: WorkerLoaders | None = None
-_worker_loaders_key: tuple[object, str] | None = None
+_worker_loaders_key: tuple[object, str, float] | None = None
 
 
 @dataclass(frozen=True)
@@ -72,7 +72,7 @@ def _get_worker_loaders(
     device: torch.device,
 ) -> WorkerLoaders:
     global _worker_loaders, _worker_loaders_key
-    cache_key = experiment.train, str(device)
+    cache_key = experiment.train, str(device), experiment.label_noise
     if _worker_loaders is None or _worker_loaders_key != cache_key:
         config = experiment.train
         train_loader, val_loader, _, n_train, n_val, _ = build_cifar10_dataloaders(
@@ -84,6 +84,7 @@ def _get_worker_loaders(
             config.num_workers,
             config.validation_fraction,
             device,
+            label_noise=experiment.label_noise,
         )
         _worker_loaders = train_loader, val_loader, n_train, n_val
         _worker_loaders_key = cache_key

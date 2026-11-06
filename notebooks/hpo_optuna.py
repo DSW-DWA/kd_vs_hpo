@@ -30,6 +30,7 @@ def build_experiment(cfg: DictConfig) -> HPOExperimentConfig:
     hpo_cfg = cfg.hpo
 
     experiment = HPOExperimentConfig(
+        label_noise=float(hpo_cfg.get("label_noise", 0.0)),
         train=TrainConfig(
             batch_size=int(general_cfg.batch_size),
             num_workers=int(general_cfg.num_workers),
