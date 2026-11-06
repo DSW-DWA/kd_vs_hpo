@@ -1,0 +1,19 @@
+defaults:
+  - hpo_base
+  - _self_
+
+# 50 new trials with 20% label noise in train and validation; test stays clean.
+output_dir: outputs/hpo_11570_noise20_tpe_50
+arch_rows: [1]
+num_processes: 1
+label_noise: 0.2
+imported_trials: []
+
+optuna:
+  n_trials: 50
+  max_epochs: 200
+  samplers: [tpe]
+  pruners: [none]
+  startup_trials: 5
+  fixed_trial_seed: true
+  fresh_dataloaders_per_trial: true

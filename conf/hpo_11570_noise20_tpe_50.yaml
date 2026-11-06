@@ -1,0 +1,5 @@
+defaults:
+  - _self_
+  - general: general
+  - hpo: hpo_11570_noise20_tpe_50
+  - kd: kd_base
