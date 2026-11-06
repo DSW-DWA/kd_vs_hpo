@@ -3,7 +3,6 @@ import torch
 import torchmetrics
 from lightning import Trainer
 from lightning.pytorch.callbacks import (
-    EarlyStopping,
     LearningRateMonitor,
     ModelCheckpoint,
     ModelSummary,

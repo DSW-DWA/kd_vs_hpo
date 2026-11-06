@@ -9,7 +9,7 @@ from torch import nn
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from xautodl.models import get_cell_based_tiny_net
 
-from kd_vs_hpo.common.dataloader import build_cifar10_dataloaders
+from kd_vs_hpo.common.dataloader import build_dataloaders, get_num_classes
 from kd_vs_hpo.common.flops import FlopsBudgetTracker, count_flops_params
 from kd_vs_hpo.common.train_modules import KDLightningModule, build_trainer
 from kd_vs_hpo.common.utils import get_architectures_from_json, load_checkpoint
@@ -68,11 +68,14 @@ def run_training_pipeline(
         kd_loss: nn.Module | None = None,
         flops_tracker: FlopsBudgetTracker | None = None,
         num_classes: int = 10,
+        dataset_name: str = "cifar10",
+        label_noise: float = 0.0,
         config: DictConfig | None = None,
 ):  
 
-    train_loader, val_loader, test_loader, *_ = build_cifar10_dataloaders(
-        checkpoint_dir, log_dir, data_root, seed, batch_size, num_workers, validation_fraction, device
+    train_loader, val_loader, test_loader, *_ = build_dataloaders(
+        dataset_name, checkpoint_dir, log_dir, data_root, seed, batch_size, num_workers,
+        validation_fraction, device, label_noise=label_noise,
     )
 
     module = KDLightningModule(
@@ -165,7 +168,9 @@ def main(cfg: DictConfig):
         teacher_ensemble=teacher_ensemble,
         kd_loss=kd_loss,
         flops_tracker=FlopsBudgetTracker(kd_cfg.flops_budget, kd_cfg.flops_counter_mode),
-        num_classes=10,
+        num_classes=get_num_classes(general_cfg.dataset),
+        dataset_name=general_cfg.dataset,
+        label_noise=general_cfg.label_noise,
         config=cfg,
     )
 

@@ -4,7 +4,7 @@ from dataclasses import asdict
 from typing import Any
 
 import torch
-import torch.nn as nn
+from torch import nn
 from torch.amp import GradScaler
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
@@ -21,7 +21,6 @@ from kd_vs_hpo.common.utils import (
     set_seed,
     stage_checkpoint_path,
 )
-
 
 logger = logging.getLogger(__name__)
 
