@@ -1,4 +1,3 @@
-import json
 from pathlib import Path
 
 import lightning as L
