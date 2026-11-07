@@ -1,4 +1,4 @@
-d#!/usr/bin/env zsh
+#!/usr/bin/env zsh
 
 teacher_dir='/home/ivanov.timofey51/kd_vs_hpo/experiments/checkpoints/base_noise_10'
 
