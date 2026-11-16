@@ -2,6 +2,7 @@ import json
 import shutil
 from collections import Counter
 from dataclasses import asdict
+from datetime import datetime, timezone
 from importlib.metadata import version
 from pathlib import Path
 from typing import Any
@@ -17,6 +18,7 @@ from kd_vs_hpo.hpo.config import (
     validate_imported_trial_files,
 )
 from kd_vs_hpo.hpo.persistence import save_result_tables, save_run_config
+from kd_vs_hpo.hpo.resume import validate_resume
 from kd_vs_hpo.hpo.results import HPOExperimentResult, build_experiment_result
 from kd_vs_hpo.hpo.worker import (
     build_study_tasks,
@@ -33,7 +35,16 @@ def run_hpo_experiment(
     device = _resolve_device(experiment.device)
     experiment.output_dir.mkdir(parents=True, exist_ok=True)
     recovery_dir = experiment.output_dir / "recovery"
-    shutil.rmtree(recovery_dir, ignore_errors=True)
+    if experiment.resume:
+        validate_resume(experiment)
+        backup = experiment.output_dir / (
+            "recovery_backup_" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+        )
+        shutil.copytree(recovery_dir, backup)
+    elif recovery_dir.exists():
+        raise FileExistsError(
+            f"Recovery data exists in {recovery_dir}. Use resume or a new output_dir."
+        )
 
     architectures = _load_architectures(
         experiment.architectures_path,

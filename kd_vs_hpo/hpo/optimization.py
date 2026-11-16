@@ -24,6 +24,7 @@ from kd_vs_hpo.hpo.config import (
     validate_imported_trial_files,
 )
 from kd_vs_hpo.hpo.persistence import save_study_progress
+from kd_vs_hpo.hpo.resume import restore_study
 from kd_vs_hpo.hpo.training import build_lightning_module, fit_lightning_trial
 
 SAMPLER_OFFSETS = {name: offset for offset, name in enumerate(SAMPLER_NAMES)}
@@ -77,7 +78,15 @@ def run_study(
         storage_path=storage_path,
     )
     initial_trial = _initial_trial_parameters(experiment)
-    if storage_path is None and sampler_name != "grid":
+    restored_count = 0
+    if experiment.resume:
+        trial_records, epoch_records, retry = restore_study(
+            study, experiment, progress_dir, study_record
+        )
+        restored_count = len(trial_records)
+        if retry is not None:
+            study.enqueue_trial(retry)
+    if (not experiment.resume or (restored_count == 0 and retry is None)) and storage_path is None and sampler_name != "grid":
         study.enqueue_trial(initial_trial)
 
     def objective(trial: optuna.Trial) -> float:
@@ -272,7 +281,8 @@ def run_study(
 
     study.optimize(
         objective,
-        n_trials=experiment.optuna.n_trials if n_trials is None else n_trials,
+        n_trials=max(0, (experiment.optuna.n_trials if n_trials is None else n_trials)
+                     - restored_count),
     )
     return trial_records, epoch_records
 

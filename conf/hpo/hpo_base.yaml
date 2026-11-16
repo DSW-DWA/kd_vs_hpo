@@ -2,6 +2,7 @@
 device: auto
 # Fraction of train and validation labels replaced; test labels remain clean.
 label_noise: 0.0
+resume: false
 
 output_dir: outputs/hpo
 checkpoint_dir: ${hpo.output_dir}/checkpoints

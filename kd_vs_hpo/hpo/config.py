@@ -80,6 +80,7 @@ class HPOExperimentConfig:
     device: DeviceName = "auto"
     imported_trials: tuple[ImportedTrialConfig, ...] = ()
     label_noise: float = 0.0
+    resume: bool = False
 
 
 def validate_imported_trial_files(experiment: HPOExperimentConfig) -> None:
