@@ -12,9 +12,9 @@ from kd_vs_hpo.common.flops import CounterMode, FlopsBudgetTracker
 from kd_vs_hpo.common.nats import create_nats_model
 from kd_vs_hpo.common.utils import set_seed
 from kd_vs_hpo.hpo.config import (
+    SAMPLER_NAMES,
     HPOExperimentConfig,
     PrunerName,
-    SAMPLER_NAMES,
     SamplerName,
 )
 from kd_vs_hpo.hpo.persistence import save_study_progress

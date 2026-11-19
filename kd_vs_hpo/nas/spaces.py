@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+import json
+
 import numpy as np
 from archai.discrete_search.api import ArchaiModel, EvolutionarySearchSpace
 from overrides import overrides
 
-from kd_vs_hpo.nas.constants import NATSOperations
+from kd_vs_hpo.nas.constants import (
+    NATSOperations,
+    get_arch_by_operations,
+    get_operations_by_arch,
+)
 from kd_vs_hpo.nas.models import NATSArchaiModel
 
 
@@ -45,11 +51,35 @@ class NATSEvolutionarySearchSpace(EvolutionarySearchSpace):
 
     @overrides
     def save_arch(self, model: ArchaiModel, path: str):
-        pass
+        payload = {
+            "archid": model.archid,
+            "nats_index": int(model.nats_index),
+            "operations": [str(op) for op in model.operations],
+            "arch_str": get_arch_by_operations(model.operations),
+        }
+        with open(path, "w", encoding="utf-8") as file:
+            json.dump(payload, file)
 
     @overrides
     def load_arch(self, path: str):
-        pass
+        with open(path, encoding="utf-8") as file:
+            payload = json.load(file)
+
+        arch_id = payload.get(
+            "nats_index", payload.get("arch_index", payload.get("archid"))
+        )
+        if arch_id is None:
+            raise ValueError(f"Architecture file {path} does not contain an index")
+        arch_id = int(arch_id)
+
+        if payload.get("operations") is not None:
+            operations = [NATSOperations(op) for op in payload["operations"]]
+        elif payload.get("arch_str"):
+            operations = get_operations_by_arch(payload["arch_str"])
+        else:
+            operations = get_operations_by_arch(self.api.arch(arch_id))
+
+        return NATSArchaiModel(self.api, operations, arch_id=arch_id)
 
     @overrides
     def save_model_weights(self, model: ArchaiModel, path: str):
