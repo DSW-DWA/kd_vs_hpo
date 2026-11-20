@@ -1,6 +1,6 @@
 from typing import Any
 
-import torch.nn as nn
+from torch import nn
 from xautodl.config_utils import dict2config
 from xautodl.models import get_cell_based_tiny_net
 

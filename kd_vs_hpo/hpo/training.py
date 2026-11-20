@@ -9,16 +9,16 @@ from typing import Any
 import lightning as L
 import optuna
 import torch
-import torch.nn as nn
+from torch import nn
 from torch.utils.data import DataLoader
 
 from kd_vs_hpo.common.config import TrainConfig
 from kd_vs_hpo.common.flops import FlopsBudgetTracker
+from kd_vs_hpo.common.train_modules import KDLightningModule, build_trainer
 from kd_vs_hpo.common.train_pipeline import (
     DEFAULT_OPTIMIZER_CLS,
     DEFAULT_SCHEDULER_CLS,
 )
-from kd_vs_hpo.common.train_modules import KDLightningModule, build_trainer
 
 
 @dataclass(frozen=True)
@@ -77,7 +77,7 @@ class OptunaMetricsCallback(L.Callback):
             torch.save(
                 {
                     "model": pl_module.model.state_dict(),
-                    "arch_record": getattr(pl_module, "arch_record"),
+                    "arch_record": pl_module.arch_record,
                 },
                 self.checkpoint_path,
             )
