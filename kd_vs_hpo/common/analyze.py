@@ -12,13 +12,14 @@ import torchmetrics
 from omegaconf import OmegaConf
 from scipy import stats
 
-from kd_vs_hpo.common.dataloader import build_cifar10_dataloaders
+from kd_vs_hpo.common.dataloader import build_dataloaders, get_num_classes
 from kd_vs_hpo.common.utils import (
     extract_logits,
     get_arch_by_idx,
     get_architectures_from_json,
     load_checkpoint,
 )
+from kd_vs_hpo.kd.teacher import TeacherEnsemble
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +101,25 @@ def load_model(
         return load_checkpoint(str(ckpt_path), arch, **_load_kwargs_from_params(params))
 
 
+def _top1_accuracy(
+    logits_fn,
+    val_loader,
+    device: torch.device,
+    num_classes: int,
+) -> float:
+    """Compute top-1 accuracy from a callable mapping images -> logits."""
+    metric = torchmetrics.classification.Accuracy(
+        task="multiclass", num_classes=num_classes
+    ).to(device)
+    with torch.inference_mode():
+        for images, targets in val_loader:
+            images = images.to(device, non_blocking=True)
+            targets = targets.to(device, non_blocking=True)
+            logits = logits_fn(images)
+            metric.update(logits, targets)
+    return float(metric.compute())
+
+
 def score_on_validation(
     module: torch.nn.Module,
     val_loader,
@@ -109,16 +129,24 @@ def score_on_validation(
     """Compute top-1 accuracy of a module on the given loader (eval mode)."""
     module.to(device)
     module.eval()
-    metric = torchmetrics.classification.Accuracy(
-        task="multiclass", num_classes=num_classes
-    ).to(device)
-    with torch.inference_mode():
-        for images, targets in val_loader:
-            images = images.to(device, non_blocking=True)
-            targets = targets.to(device, non_blocking=True)
-            logits = extract_logits(module(images))
-            metric.update(logits, targets)
-    return float(metric.compute())
+    return _top1_accuracy(
+        lambda images: extract_logits(module(images)),
+        val_loader,
+        device,
+        num_classes,
+    )
+
+
+def score_ensemble_on_validation(
+    ensemble: TeacherEnsemble,
+    val_loader,
+    device: torch.device,
+    num_classes: int,
+) -> float:
+    """Compute top-1 accuracy of a TeacherEnsemble on the given loader."""
+    ensemble.to(device)
+    ensemble.eval()
+    return _top1_accuracy(ensemble.logits, val_loader, device, num_classes)
 
 
 def analyze_run(
@@ -148,13 +176,16 @@ def analyze_run(
     student_ckpt = find_run_checkpoint(run_dir)
     student_module = load_model(student_ckpt, student_arch, params)
 
-    num_classes = int(student_arch.get("num_classes", 10))
+    dataset_name = general.get("dataset", "cifar10")
+    label_noise = float(general.get("label_noise", 0.0))
+    num_classes = int(student_arch.get("num_classes", get_num_classes(dataset_name)))
 
     checkpoint_dir = _resolve_path(kd["checkpoint_dir"])
     log_dir = _resolve_path(kd["log_dir"])
     data_root = _resolve_path(general["data_root"])
 
-    _, _, test_loader, _, _, _ = build_cifar10_dataloaders(
+    _, _, test_loader, _, _, _ = build_dataloaders(
+        dataset_name,
         checkpoint_dir,
         log_dir,
         data_root,
@@ -163,6 +194,7 @@ def analyze_run(
         general["num_workers"],
         general["validation_fraction"],
         device,
+        label_noise=label_noise,
     )
 
     student_test_acc = score_on_validation(
@@ -182,6 +214,7 @@ def analyze_run(
 
     teachers_mapping = kd.get("teachers_mapping")
     if teachers_mapping:
+        teacher_modules = []
         for mapping in teachers_mapping:
             teacher_idx = mapping["idx"]
             teacher_ckpt = _resolve_path(mapping["path"])
@@ -202,6 +235,7 @@ def analyze_run(
             teacher_test_acc = score_on_validation(
                 teacher_module, test_loader, device, teacher_num_classes
             )
+            teacher_modules.append(teacher_module)
             result["teachers"].append(
                 {
                     "arch_idx": teacher_idx,
@@ -210,6 +244,16 @@ def analyze_run(
                     "params": teacher_params or params,
                 }
             )
+
+        if len(teacher_modules) > 1:
+            ensemble = TeacherEnsemble(teacher_modules)
+            ensemble_test_acc = score_ensemble_on_validation(
+                ensemble, test_loader, device, num_classes
+            )
+            result["teacher_ensemble"] = {
+                "n_teachers": len(teacher_modules),
+                "test_acc": ensemble_test_acc,
+            }
 
     return result
 
@@ -250,6 +294,7 @@ def summarize(results: list[dict]) -> list[dict]:
                 "checkpoint": student["checkpoint"],
                 "test_acc": student["test_acc"],
                 "params": student["params"],
+                "ensemble_acc": res['teacher_ensemble']['test_acc']
             }
         )
         for teacher in res["teachers"]:

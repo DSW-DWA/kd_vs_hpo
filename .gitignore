@@ -11,7 +11,6 @@ wheels/
 launch.json
 
 # Experiment outputs
-data/
 runs/
 hpo_output/
 checkpoints/
@@ -29,3 +28,7 @@ hpo_8712_tpe_50
 hpo_11570_1342_tpe_50
 hpo_1342_analysis
 hpo_1342_five_teachers_tpe_50
+hpo_1342_noise10_tpe_50
+hpo_1342_noise20_tpe_50
+hpo_1342_noise30_tpe_50
+hpo_1342_noise_analysis
