@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from pathlib import Path
 
 import torch
@@ -5,9 +6,42 @@ import torchvision.transforms as T
 from torch.utils.data import DataLoader, Dataset, Subset
 from torchvision import datasets
 
+
+@dataclass(frozen=True)
+class DatasetSpec:
+    """Dataset entry.
+
+    ``noisy_targets_path`` points to a ``.pt`` file created by
+    ``scripts/save_noisy_dataset.py``. When set, the precomputed noisy targets
+    are loaded from that path instead of being generated from ``label_noise``.
+    """
+
+    dataset_cls: type[Dataset]
+    num_classes: int
+    noisy_targets_path: Path | None = None
+
+
 DATASETS = {
-    "cifar10": (datasets.CIFAR10, 10),
-    "cifar100": (datasets.CIFAR100, 100),
+    "cifar10": DatasetSpec(datasets.CIFAR10, 10),
+    "cifar100": DatasetSpec(datasets.CIFAR100, 100),
+    "cifar10_n10": DatasetSpec(
+        datasets.CIFAR10, 10, Path("data/cifar10_n10.pt")
+    ),
+    "cifar10_n20": DatasetSpec(
+        datasets.CIFAR10, 10, Path("data/cifar10_n20.pt")
+    ),
+    "cifar10_n30": DatasetSpec(
+        datasets.CIFAR10, 10, Path("data/cifar10_n30.pt")
+    ),
+    "cifar100_n10": DatasetSpec(
+        datasets.CIFAR100, 100, Path("data/cifar100_n10.pt")
+    ),
+    "cifar100_n20": DatasetSpec(
+        datasets.CIFAR100, 100, Path("data/cifar100_n20.pt")
+    ),
+    "cifar100_n30": DatasetSpec(
+        datasets.CIFAR100, 100, Path("data/cifar100_n30.pt")
+    ),
 }
 
 
@@ -41,8 +75,7 @@ def _build_noisy_targets(
     *,
     groups: tuple[list[int], ...] | None = None,
 ) -> torch.Tensor | None:
-    """Build a deterministic noisy target map.
-    """
+    """Build a deterministic noisy target map."""
     if noise_fraction <= 0:
         return None
 
@@ -51,7 +84,7 @@ def _build_noisy_targets(
 
     if groups is None:
         groups = (list(range(len(targets))),)
-        
+
     gen = torch.Generator().manual_seed(seed + 1)
     total_noisy = 0
 
@@ -88,6 +121,18 @@ def _build_noisy_targets(
     return noisy_targets
 
 
+def _load_noisy_targets(path: Path) -> torch.Tensor:
+    """Load a noisy target map saved by ``scripts/save_noisy_dataset.py``."""
+    payload = torch.load(path, map_location="cpu")
+
+    if isinstance(payload, dict):
+        if "noisy_targets" not in payload:
+            raise KeyError(f"{path} does not contain 'noisy_targets'")
+        payload = payload["noisy_targets"]
+
+    return torch.as_tensor(payload, dtype=torch.long)
+
+
 normalize_kwargs = {
     "mean": [0.49139968, 0.48215841, 0.44653091],
     "std": [0.24703223, 0.24348513, 0.26158784],
@@ -112,7 +157,7 @@ eval_transform = T.Compose(
 
 def get_num_classes(dataset_name: str) -> int:
     try:
-        return DATASETS[dataset_name][1]
+        return DATASETS[dataset_name].num_classes
     except KeyError:
         raise ValueError(
             f"Unsupported dataset: {dataset_name!r}. "
@@ -142,10 +187,14 @@ def build_dataloaders(
     When ``label_noise`` is nonzero, that fraction of train and validation
     labels is randomly switched to another class (symmetric noise, seeded),
     while the test labels are left untouched.
+
+    If the dataset entry in ``DATASETS`` has ``noisy_targets_path`` set, the
+    targets are loaded from that path instead, and ``label_noise`` is ignored.
     """
 
-    dataset_cls, _ = DATASETS[dataset_name]
-    num_classes = get_num_classes(dataset_name)
+    dataset_spec = DATASETS[dataset_name]
+    dataset_cls = dataset_spec.dataset_cls
+    num_classes = dataset_spec.num_classes
 
     if not 0.0 <= label_noise <= 1.0:
         raise ValueError(f"label_noise must be in [0, 1], got {label_noise}")
@@ -170,7 +219,9 @@ def build_dataloaders(
     val_indices = indices[:n_val]
     train_indices = indices[n_val:]
 
-    if label_noise > 0:
+    if dataset_spec.noisy_targets_path is not None:
+        noisy_targets = _load_noisy_targets(dataset_spec.noisy_targets_path)
+    elif label_noise > 0:
         noisy_targets = _build_noisy_targets(
             train_dataset,
             num_classes,
@@ -178,15 +229,17 @@ def build_dataloaders(
             seed,
             groups=(train_indices, val_indices),
         )
+    else:
+        noisy_targets = None
 
-        if noisy_targets is not None:
-            train_dataset = _LabelNoiseDataset(
-                train_dataset, noisy_targets
+    if noisy_targets is not None:
+        if len(noisy_targets) != len(train_dataset):
+            raise ValueError(
+                f"Noisy targets have length {len(noisy_targets)}, "
+                f"but {dataset_name} has {len(train_dataset)} training samples"
             )
-            train_eval_dataset = _LabelNoiseDataset(
-                train_eval_dataset, noisy_targets
-            )
-
+        train_dataset = _LabelNoiseDataset(train_dataset, noisy_targets)
+        train_eval_dataset = _LabelNoiseDataset(train_eval_dataset, noisy_targets)
 
     pin_memory = device.type == "cuda"
     persistent_workers = num_workers > 0

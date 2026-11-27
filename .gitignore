@@ -11,7 +11,6 @@ wheels/
 launch.json
 
 # Experiment outputs
-data/
 runs/
 hpo_output/
 checkpoints/

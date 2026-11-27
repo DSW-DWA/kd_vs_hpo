@@ -1,15 +1,15 @@
 #!/usr/bin/env zsh
 
-teacher_dir='/home/ivanov.timofey51/kd_vs_hpo/experiments/checkpoints/base_noise_20'
+teacher_dir='/home/ivanov.timofey51/kd_vs_hpo/experiments/checkpoints/cifar10_noise_fix/base_noise_20'
 
-teacher_11570_84="{idx: 11570, path: '${teacher_dir}/arch_11570_teachers__seed_84_KullbackLeiblerKDLoss/arch_11570_teachers__seed_84_KullbackLeiblerKDLossepoch=epoch=129-val_acc=val_acc=0.6892.ckpt'}"
-teacher_11570_17="{idx: 11570, path: '${teacher_dir}/arch_11570_teachers__seed_17_KullbackLeiblerKDLoss/arch_11570_teachers__seed_17_KullbackLeiblerKDLossepoch=epoch=128-val_acc=val_acc=0.6808.ckpt'}"
+teacher_11570_84="{idx: 11570, path: '${teacher_dir}/arch_11570_teachers__seed_84_KullbackLeiblerKDLoss/arch_11570_teachers__seed_84_KullbackLeiblerKDLossepoch=epoch=132-val_acc=val_acc=0.6862.ckpt'}"
+teacher_11570_17="{idx: 11570, path: '${teacher_dir}/arch_11570_teachers__seed_17_KullbackLeiblerKDLoss/arch_11570_teachers__seed_17_KullbackLeiblerKDLossepoch=epoch=115-val_acc=val_acc=0.6842.ckpt'}"
 
-teacher_8712_17="{idx: 8712, path: '${teacher_dir}/arch_8712_teachers__seed_17_KullbackLeiblerKDLoss/arch_8712_teachers__seed_17_KullbackLeiblerKDLossepoch=epoch=172-val_acc=val_acc=0.6088.ckpt'}"
-teacher_8712_84="{idx: 8712, path: '${teacher_dir}/arch_8712_teachers__seed_84_KullbackLeiblerKDLoss/arch_8712_teachers__seed_84_KullbackLeiblerKDLossepoch=epoch=188-val_acc=val_acc=0.6054.ckpt'}"
+teacher_8712_17="{idx: 8712, path: '${teacher_dir}/arch_8712_teachers__seed_17_KullbackLeiblerKDLoss/arch_8712_teachers__seed_17_KullbackLeiblerKDLossepoch=epoch=183-val_acc=val_acc=0.6134.ckpt'}"
+teacher_8712_84="{idx: 8712, path: '${teacher_dir}/arch_8712_teachers__seed_84_KullbackLeiblerKDLoss/arch_8712_teachers__seed_84_KullbackLeiblerKDLossepoch=epoch=181-val_acc=val_acc=0.5968.ckpt'}"
 
-teacher_1342_84="{idx: 1342, path: '${teacher_dir}/arch_1342_teachers__seed_84_KullbackLeiblerKDLoss/arch_1342_teachers__seed_84_KullbackLeiblerKDLossepoch=epoch=188-val_acc=val_acc=0.5790.ckpt'}"
-teacher_1342_17="{idx: 1342, path: '${teacher_dir}/arch_1342_teachers__seed_17_KullbackLeiblerKDLoss/arch_1342_teachers__seed_17_KullbackLeiblerKDLossepoch=epoch=197-val_acc=val_acc=0.5766.ckpt'}"
+teacher_1342_84="{idx: 1342, path: '${teacher_dir}/arch_1342_teachers__seed_84_KullbackLeiblerKDLoss/arch_1342_teachers__seed_84_KullbackLeiblerKDLossepoch=epoch=189-val_acc=val_acc=0.5678.ckpt'}"
+teacher_1342_17="{idx: 1342, path: '${teacher_dir}/arch_1342_teachers__seed_17_KullbackLeiblerKDLoss/arch_1342_teachers__seed_17_KullbackLeiblerKDLossepoch=epoch=186-val_acc=val_acc=0.5664.ckpt'}"
 
 run() {
   local student="$1"
@@ -21,10 +21,9 @@ run() {
     "kd.teachers_mapping=${teachers_mapping}" \
     "kd.student=${student}" \
     general.seed=42,17,84 \
-    kd.checkpoint_dir=experiments/checkpoints/kd_two_teachers_noise20 \
-    kd.log_dir=logs/kd_two_teachers_noise20 \
-    general.dataset=cifar10 \
-    general.label_noise=0.2
+    kd.checkpoint_dir=experiments/checkpoints/kd_two_teachers_noise20_new \
+    kd.log_dir=logs/kd_two_teachers_noise20_new \
+    general.dataset=cifar10_n20
 }
 
 run 11570 "[${teacher_11570_84},${teacher_11570_17}]"
